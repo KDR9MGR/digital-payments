@@ -7,6 +7,7 @@ import '../services/payment_validation_service.dart';
 import '../services/firebase_batch_service.dart';
 import '../services/firebase_query_optimizer.dart';
 import '../services/firebase_cache_service.dart';
+import '../services/subscription_error_handler.dart';
 import '/utils/app_logger.dart';
 import '../screens/paywall_screen.dart';
 import 'dart:async';
@@ -300,7 +301,7 @@ class SubscriptionController extends GetxController {
   // Check subscription status
   Future<void> _checkSubscriptionStatus() async {
     try {
-      AppLogger.log('Checking subscription status...');
+      AppLogger.log('SubscriptionController: Checking subscription status...');
       
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
@@ -309,28 +310,36 @@ class SubscriptionController extends GetxController {
         return;
       }
 
-      // First check subscription service for immediate status
-      final serviceHasSubscription = _subscriptionService.hasActiveSubscription;
+      // Always check with subscription service first for the most accurate status
+      final serviceHasSubscription = await _subscriptionService.isUserSubscribed(forceRefresh: true);
       
       // Use optimized query service for subscription status validation
       final subscriptionData = await _queryOptimizer.getSubscriptionStatus(user.uid);
       
-      final isValid = subscriptionData != null || serviceHasSubscription;
+      // Prioritize service status as it includes platform validation
+      final isValid = serviceHasSubscription || (subscriptionData != null);
       _hasActiveSubscription.value = isValid;
       _subscriptionStatus.value = isValid ? 'active' : 'inactive';
       
       if (isValid) {
         _currentPlan.value = subscriptionData?['planId'] ?? singlePlanId;
-        AppLogger.log('User has active subscription (Service: $serviceHasSubscription, Firebase: ${subscriptionData != null})');
+        AppLogger.log('SubscriptionController: User has active subscription (Service: $serviceHasSubscription, Firebase: ${subscriptionData != null})');
       } else {
         _currentPlan.value = '';
-        AppLogger.log('User does not have active subscription');
+        AppLogger.log('SubscriptionController: User does not have active subscription');
       }
     } catch (e) {
-      AppLogger.error('Error checking subscription status', error: e);
+      AppLogger.error('SubscriptionController: Error checking subscription status', error: e);
       // Fallback to subscription service status on error
-      _hasActiveSubscription.value = _subscriptionService.hasActiveSubscription;
-      _subscriptionStatus.value = _hasActiveSubscription.value ? 'active' : 'inactive';
+      try {
+        final fallbackStatus = await _subscriptionService.isUserSubscribed();
+        _hasActiveSubscription.value = fallbackStatus;
+        _subscriptionStatus.value = fallbackStatus ? 'active' : 'inactive';
+        AppLogger.log('SubscriptionController: Using fallback status: $fallbackStatus');
+      } catch (fallbackError) {
+        AppLogger.log('SubscriptionController: Fallback also failed: $fallbackError');
+        // Keep current status if both fail
+      }
     }
   }
 
@@ -401,7 +410,19 @@ class SubscriptionController extends GetxController {
           'currentPeriodEnd': DateTime.now().add(Duration(days: 30)),
         });
 
-        await _initializeSubscriptionData(); // Refresh data
+        // Force refresh subscription status in service first
+        await _subscriptionService.isUserSubscribed(forceRefresh: true);
+        
+        // Then refresh controller data
+        await _initializeSubscriptionData();
+        
+        // Update local status immediately
+        _hasActiveSubscription.value = true;
+        _subscriptionStatus.value = 'active';
+        _currentPlan.value = singlePlanId;
+        
+        AppLogger.log('SubscriptionController: Subscription activated successfully');
+        
         Get.back(); // Go back to previous screen
         Get.snackbar('Success', 'Welcome to Super Payments! 🎉');
         return true;
@@ -410,7 +431,13 @@ class SubscriptionController extends GetxController {
       return false;
     } catch (e) {
       AppLogger.log('Error subscribing with Moov: $e');
-      Get.snackbar('Error', 'Failed to subscribe: $e');
+      
+      // Use proper error handling instead of showing raw exception
+      await SubscriptionErrorHandler().handleSubscriptionError(
+        errorType: 'payment_error',
+        errorMessage: e.toString(),
+        context: {'screen': 'subscription', 'action': 'moov_subscribe'},
+      );
       return false;
     } finally {
       _isLoading.value = false;
@@ -696,7 +723,19 @@ class SubscriptionController extends GetxController {
           'validatedAt': paymentValidation['validatedAt'],
         });
 
-        await _initializeSubscriptionData(); // Refresh data
+        // Force refresh subscription status in service first
+        await _subscriptionService.isUserSubscribed(forceRefresh: true);
+        
+        // Then refresh controller data
+        await _initializeSubscriptionData();
+        
+        // Update local status immediately
+        _hasActiveSubscription.value = true;
+        _subscriptionStatus.value = 'active';
+        _currentPlan.value = singlePlanId;
+        
+        AppLogger.log('SubscriptionController: Apple Pay subscription activated successfully');
+        
         PaymentValidationService.endPaymentSession();
         Get.back(); // Go back to previous screen
         Get.snackbar('Success', 'Welcome to Super Payments! 🎉');
@@ -707,7 +746,13 @@ class SubscriptionController extends GetxController {
     } catch (e) {
       AppLogger.log('Error processing Apple Pay subscription: $e');
       PaymentValidationService.endPaymentSession();
-      Get.snackbar('Error', 'Failed to process Apple Pay payment: $e');
+      
+      // Use proper error handling instead of showing raw exception
+      await SubscriptionErrorHandler().handleSubscriptionError(
+        errorType: 'payment_error',
+        errorMessage: e.toString(),
+        context: {'screen': 'subscription', 'action': 'apple_pay_subscribe'},
+      );
     } finally {
       _isLoading.value = false;
     }

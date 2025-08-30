@@ -65,6 +65,7 @@ import '../views/withdraw/add_withdraw_method_screen.dart';
 import '../views/withdraw/confirm_screen.dart' as withdraw_confirm;
 import '../views/withdraw/withdraw_method_screen.dart';
 import '../views/withdraw_history/withdraw_history_screen.dart';
+import '../views/debug/error_debug_screen.dart';
 
 class Routes {
   static const String splashScreen = '/splashScreen';
@@ -261,6 +262,7 @@ class Routes {
   // Subscription routes
   static const String subscriptionScreen = '/subscriptionScreen';
   static const String subscriptionPlansScreen = '/subscriptionPlansScreen';
+  static const String errorDebugScreen = '/errorDebugScreen';
 
   static var list = [
     GetPage(
@@ -392,6 +394,10 @@ class Routes {
     GetPage(
       name: Routes.subscriptionPlansScreen,
       page: () => const SubscriptionPlansScreen(),
+    ),
+    GetPage(
+      name: Routes.errorDebugScreen,
+      page: () => ErrorDebugScreen(),
     ),
   ];
 }

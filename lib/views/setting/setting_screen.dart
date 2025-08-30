@@ -4,6 +4,8 @@ import 'package:get/get.dart';
 import '../../controller/settings_controller.dart';
 import '../../routes/routes.dart';
 import '../../services/video_settings_service.dart';
+import '../../services/subscription_error_handler.dart';
+import '../../utils/error_debug_helper.dart';
 import '../../utils/custom_color.dart';
 import '../../utils/custom_style.dart';
 import '../../utils/dimensions.dart';
@@ -110,6 +112,9 @@ class SettingsScreen extends StatelessWidget {
               icon: Icons.delete_forever_outlined,
               isDestructive: true,
             ),
+            SizedBox(height: Dimensions.heightSize),
+            // Debug Error Management (only show if there are errors)
+            _debugErrorManagementWidget(),
             // settingsItemWidget(
             //   controller,
             //   onTap: () {
@@ -181,6 +186,26 @@ class SettingsScreen extends StatelessWidget {
           )),
         ],
       ),
+    );
+  }
+
+  Widget _debugErrorManagementWidget() {
+    final errorStats = ErrorDebugHelper.getErrorStats();
+    final totalErrors = errorStats['totalErrors'] ?? 0;
+    
+    // Only show if there are errors to clear
+    if (totalErrors == 0) {
+      return SizedBox.shrink();
+    }
+    
+    return settingsItemWidget(
+      Get.find<SettingsController>(),
+      onTap: () {
+        Get.toNamed(Routes.errorDebugScreen);
+      },
+      title: 'Debug Error Management ($totalErrors errors)',
+      icon: Icons.bug_report_outlined,
+      isDestructive: true,
     );
   }
 

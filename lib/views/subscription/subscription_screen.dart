@@ -83,22 +83,17 @@ class SubscriptionScreen extends StatelessWidget {
 
   Widget _subscriptionStatusWidget(SubscriptionController controller) {
     return SubscriptionStatusWidget(
-      builder: (hasActive, isInGracePeriod) {
+      builder: (hasActive) {
         Color statusColor;
         String statusTitle;
         String statusSubtitle;
         IconData statusIcon;
         
-        if (hasActive && !isInGracePeriod) {
+        if (hasActive) {
           statusColor = Colors.green;
           statusTitle = 'Premium Active';
           statusSubtitle = 'Enjoying all premium features';
           statusIcon = Icons.verified;
-        } else if (isInGracePeriod) {
-          statusColor = Colors.orange;
-          statusTitle = 'Grace Period Active';
-          statusSubtitle = 'Renew your subscription to continue premium access';
-          statusIcon = Icons.warning;
         } else {
           statusColor = Colors.orange;
           statusTitle = 'Free Plan';
@@ -157,7 +152,7 @@ class SubscriptionScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              if (hasActive && !isInGracePeriod)
+              if (hasActive)
                 Icon(Icons.workspace_premium, color: Colors.green, size: 28.r),
             ],
           ),

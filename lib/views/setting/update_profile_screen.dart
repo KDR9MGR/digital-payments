@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:xpay/utils/utils.dart';
+import '../../services/subscription_error_handler.dart';
 
 import '../../controller/settings_controller.dart';
 import '../../utils/custom_color.dart';
@@ -296,10 +297,12 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
             } catch (e) {
               if (context.mounted) {
                 Navigator.pop(context);
-                Utils.showDialogMessage(
-                  context,
-                  'Error',
-                  'Failed to update profile: $e',
+                
+                // Use proper error handling instead of showing raw exception
+                await SubscriptionErrorHandler().handleSubscriptionError(
+                  errorType: 'payment_error',
+                  errorMessage: e.toString(),
+                  context: {'screen': 'update_profile', 'action': 'update_profile'},
                 );
               }
             }
@@ -370,7 +373,12 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
         settingsController.userPhoto = File(image.path);
       });
     } on PlatformException catch (e) {
-      CustomSnackBar.error('Error: $e');
+      // Use proper error handling instead of showing raw exception
+      await SubscriptionErrorHandler().handleSubscriptionError(
+        errorType: 'payment_error',
+        errorMessage: e.toString(),
+        context: {'screen': 'update_profile', 'action': 'image_picker'},
+      );
     }
   }
 

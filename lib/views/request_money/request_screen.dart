@@ -7,6 +7,7 @@ import 'package:xpay/utils/utils.dart';
 import 'package:xpay/widgets/inputs/multiline_text_input_widget.dart';
 
 import '../../controller/request_controller.dart';
+import '../../services/subscription_error_handler.dart';
 import '../../utils/custom_color.dart';
 import '../../utils/custom_style.dart';
 import '../../utils/dimensions.dart';
@@ -479,10 +480,12 @@ class _RequestMoneyScreenState extends State<RequestMoneyScreen>
                 if (context.mounted) {
                   // TODO: Add mounted check before using context in async function
                   Navigator.pop(context);
-                  Utils.showDialogMessage(
-                    context,
-                    'Error',
-                    'Error requesting money: $error',
+                  
+                  // Use proper error handling instead of showing raw exception
+                  await SubscriptionErrorHandler().handleSubscriptionError(
+                    errorType: 'payment_error',
+                    errorMessage: error.toString(),
+                    context: {'screen': 'request_money', 'action': 'request_money'},
                   );
                 }
               }

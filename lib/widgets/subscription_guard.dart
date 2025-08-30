@@ -60,28 +60,42 @@ class _SubscriptionGuardState extends State<SubscriptionGuard> {
   }
 
   Future<void> _checkSubscriptionStatus() async {
-    // For instant paywall response, use current subscription status
-    setState(() {
-      _hasSubscription = _subscriptionController.hasActiveSubscription;
-      _isLoading = false; // Show UI immediately with current status
-    });
-
     try {
-      // Background refresh for accuracy - this will be handled automatically by the controller
-      // The controller has periodic checks, so we just need to get the current status
-
+      AppLogger.log('SubscriptionGuard: Checking subscription status...');
+      
+      // Always check with the subscription service for the most accurate status
+      final serviceHasSubscription = await _subscriptionService.isUserSubscribed(forceRefresh: true);
+      final controllerHasSubscription = _subscriptionController.hasActiveSubscription;
+      
+      // Use the service status as the source of truth, but also check controller
+      final hasValidSubscription = serviceHasSubscription || controllerHasSubscription;
+      
       if (mounted) {
         setState(() {
-          _hasSubscription = _subscriptionController.hasActiveSubscription;
+          _hasSubscription = hasValidSubscription;
+          _isLoading = false;
         });
+      }
+      
+      // If there's a mismatch, force controller to refresh
+      if (serviceHasSubscription != controllerHasSubscription) {
+        AppLogger.log('SubscriptionGuard: Status mismatch detected. Service: $serviceHasSubscription, Controller: $controllerHasSubscription. Refreshing controller...');
+        await _subscriptionController.refreshData();
       }
 
       AppLogger.log(
-        'Subscription check completed. Has subscription: $_hasSubscription',
+        'SubscriptionGuard: Check completed. Service: $serviceHasSubscription, Controller: $controllerHasSubscription, Final: $hasValidSubscription',
       );
     } catch (e) {
-      AppLogger.log('Error checking subscription status: $e');
-      // Keep current status on error
+      AppLogger.log('SubscriptionGuard: Error checking subscription status: $e');
+      
+      // On error, use controller status as fallback but don't block the user
+      if (mounted) {
+        setState(() {
+          _hasSubscription = _subscriptionController.hasActiveSubscription;
+          _isLoading = false;
+        });
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
@@ -17,25 +18,13 @@ class SubscriptionErrorHandler {
   final GetStorage _storage = GetStorage();
   final SubscriptionFallbackService _fallbackService = SubscriptionFallbackService();
   
-  // Error tracking keys
-  static const String _errorCountKey = 'subscription_error_count';
-  static const String _lastErrorTimeKey = 'last_error_time';
-  static const String _criticalErrorsKey = 'critical_errors';
-  static const String _networkErrorCountKey = 'network_error_count';
-  static const String _paymentErrorCountKey = 'payment_error_count';
-  
-  // Error thresholds
-  static const int _maxErrorsPerHour = 10;
-  static const int _maxNetworkErrors = 5;
-  static const int _maxPaymentErrors = 3;
-  static const Duration _errorResetInterval = Duration(hours: 1);
+  // Error tracking removed - using standard logging instead
 
   
   /// Initialize error handler
   Future<void> initialize() async {
     try {
       AppLogger.log('Initializing subscription error handler...');
-      await _cleanupOldErrors();
       AppLogger.log('Subscription error handler initialized successfully');
     } catch (e) {
       AppLogger.log('Error initializing subscription error handler: $e');
@@ -52,13 +41,8 @@ class SubscriptionErrorHandler {
     try {
       AppLogger.log('Handling subscription error: $errorType - $errorMessage');
       
-      // Track error occurrence
-      _trackError(errorType, errorMessage, errorCode);
-      
-      // Check if we've exceeded error thresholds
-      if (_hasExceededErrorThreshold()) {
-        return _handleCriticalErrorState(errorType, errorMessage);
-      }
+      // Log error occurrence for monitoring
+      AppLogger.log('Subscription error: $errorType - $errorMessage (Code: $errorCode)');
       
       // Handle specific error types
       switch (errorType.toLowerCase()) {
@@ -100,14 +84,7 @@ class SubscriptionErrorHandler {
 
   /// Handle network connectivity errors
   Future<bool> _handleNetworkError(String errorMessage, Map<String, dynamic>? context) async {
-    final networkErrorCount = _incrementNetworkErrorCount();
-    
-    if (networkErrorCount >= _maxNetworkErrors) {
-      // Switch to offline mode
-      AppLogger.log('Maximum network errors reached, switching to offline mode');
-      _enableOfflineMode();
-      return true;
-    }
+    AppLogger.log('Network error occurred: $errorMessage');
     
     // Show network error dialog
     _showNetworkErrorDialog(
@@ -125,13 +102,7 @@ class SubscriptionErrorHandler {
 
   /// Handle payment-related errors
   Future<bool> _handlePaymentError(String errorMessage, Map<String, dynamic>? context) async {
-    final paymentErrorCount = _incrementPaymentErrorCount();
-    
-    if (paymentErrorCount >= _maxPaymentErrors) {
-      AppLogger.log('Maximum payment errors reached, requiring manual intervention');
-      _showCriticalPaymentErrorDialog();
-      return false;
-    }
+    AppLogger.log('Payment error occurred: $errorMessage');
     
     // Analyze payment error type
     if (errorMessage.toLowerCase().contains('insufficient')) {
@@ -207,24 +178,13 @@ class SubscriptionErrorHandler {
   Future<bool> _handleServiceError(String errorMessage, Map<String, dynamic>? context) async {
     AppLogger.log('Service unavailable, checking fallback options');
     
-    // Try fallback service
-    final fallbackAvailable = _fallbackService.hasEmergencyAccess();
-    
-    if (fallbackAvailable) {
-      _showServiceErrorDialog(
-        'Service Temporarily Unavailable',
-        'Our servers are temporarily unavailable. Using backup systems to maintain your access.',
-        showEmergencyAccess: true,
-      );
-      return true;
-    } else {
-      _showServiceErrorDialog(
-        'Service Unavailable',
-        'Our subscription service is temporarily unavailable. Please try again in a few minutes.',
-        showEmergencyAccess: false,
-      );
-      return false;
-    }
+    // Show standard service error dialog
+    _showServiceErrorDialog(
+      'Service Unavailable',
+      'Our subscription service is temporarily unavailable. Please try again in a few minutes.',
+      showEmergencyAccess: false,
+    );
+    return false;
   }
 
   /// Handle subscription state conflicts
@@ -265,32 +225,7 @@ class SubscriptionErrorHandler {
     return false;
   }
 
-  /// Handle critical error state
-  Future<bool> _handleCriticalErrorState(String errorType, String errorMessage) async {
-    AppLogger.log('Critical error state reached: $errorType');
-    
-    // Store critical error information
-    _storeCriticalError(errorType, errorMessage);
-    
-    // Enable emergency access if available
-    final emergencyAccess = _fallbackService.hasEmergencyAccess();
-    
-    if (emergencyAccess) {
-      _showCriticalErrorDialog(
-        'Critical Error - Emergency Access',
-        'Multiple errors detected. Emergency access has been enabled for limited time.',
-        hasEmergencyAccess: true,
-      );
-      return true;
-    } else {
-      _showCriticalErrorDialog(
-        'Critical Error',
-        'Multiple errors detected. Please contact support for assistance.',
-        hasEmergencyAccess: false,
-      );
-      return false;
-    }
-  }
+  // Critical error state handling removed - using standard error logging instead
 
   /// Enable offline mode
   Future<bool> _enableOfflineMode() async {
@@ -342,110 +277,7 @@ class SubscriptionErrorHandler {
     return false;
   }
 
-  /// Track error occurrence
-  void _trackError(String errorType, String errorMessage, String? errorCode) {
-    final now = DateTime.now();
-    final errorCount = _getErrorCount() + 1;
-    
-    _storage.write(_errorCountKey, errorCount);
-    _storage.write(_lastErrorTimeKey, now.millisecondsSinceEpoch);
-    
-    // Store error details for analysis
-    final errorDetails = {
-      'type': errorType,
-      'message': errorMessage,
-      'code': errorCode,
-      'timestamp': now.toIso8601String(),
-    };
-    
-    final errors = _storage.read('recent_errors') ?? [];
-    errors.add(errorDetails);
-    
-    // Keep only last 20 errors
-    if (errors.length > 20) {
-      errors.removeAt(0);
-    }
-    
-    _storage.write('recent_errors', errors);
-    
-    AppLogger.log('Error tracked: $errorType (Count: $errorCount)');
-  }
-
-  /// Check if error threshold exceeded
-  bool _hasExceededErrorThreshold() {
-    final errorCount = _getErrorCount();
-    final lastErrorTime = _getLastErrorTime();
-    
-    if (lastErrorTime == null) return false;
-    
-    final timeSinceLastError = DateTime.now().difference(lastErrorTime);
-    
-    // Reset count if enough time has passed
-    if (timeSinceLastError > _errorResetInterval) {
-      _resetErrorCount();
-      return false;
-    }
-    
-    return errorCount >= _maxErrorsPerHour;
-  }
-
-  /// Get current error count
-  int _getErrorCount() {
-    return _storage.read(_errorCountKey) ?? 0;
-  }
-
-  /// Get last error time
-  DateTime? _getLastErrorTime() {
-    final timestamp = _storage.read(_lastErrorTimeKey);
-    return timestamp != null ? DateTime.fromMillisecondsSinceEpoch(timestamp) : null;
-  }
-
-  /// Reset error count
-  void _resetErrorCount() {
-    _storage.remove(_errorCountKey);
-    _storage.remove(_lastErrorTimeKey);
-  }
-
-  /// Increment network error count
-  int _incrementNetworkErrorCount() {
-    final count = (_storage.read(_networkErrorCountKey) ?? 0) + 1;
-    _storage.write(_networkErrorCountKey, count);
-    return count;
-  }
-
-  /// Increment payment error count
-  int _incrementPaymentErrorCount() {
-    final count = (_storage.read(_paymentErrorCountKey) ?? 0) + 1;
-    _storage.write(_paymentErrorCountKey, count);
-    return count;
-  }
-
-  /// Store critical error
-  void _storeCriticalError(String errorType, String errorMessage) {
-    final criticalErrors = _storage.read(_criticalErrorsKey) ?? [];
-    criticalErrors.add({
-      'type': errorType,
-      'message': errorMessage,
-      'timestamp': DateTime.now().toIso8601String(),
-    });
-    _storage.write(_criticalErrorsKey, criticalErrors);
-  }
-
-
-
-  /// Clean up old errors
-  Future<void> _cleanupOldErrors() async {
-    final lastErrorTime = _getLastErrorTime();
-    if (lastErrorTime != null) {
-      final timeSinceLastError = DateTime.now().difference(lastErrorTime);
-      if (timeSinceLastError > _errorResetInterval) {
-        _resetErrorCount();
-        _storage.remove(_networkErrorCountKey);
-        _storage.remove(_paymentErrorCountKey);
-        AppLogger.log('Cleaned up old error counts');
-      }
-    }
-  }
+  // Error tracking methods removed - using standard logging instead
 
   // Dialog methods
   void _showNetworkErrorDialog(String title, String message, {required bool showRetry}) {
@@ -632,64 +464,7 @@ class SubscriptionErrorHandler {
     );
   }
 
-  void _showCriticalErrorDialog(String title, String message, {required bool hasEmergencyAccess}) {
-    Get.dialog(
-      AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning, color: Colors.red),
-            SizedBox(width: 8),
-            Text(title),
-          ],
-        ),
-        content: Text(message),
-        actions: [
-          if (!hasEmergencyAccess)
-            TextButton(
-              onPressed: () {
-                Get.back();
-                // Open support/contact
-              },
-              child: Text('Contact Support'),
-            ),
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('OK'),
-          ),
-        ],
-      ),
-      barrierDismissible: false,
-    );
-  }
-
-  void _showCriticalPaymentErrorDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.payment, color: Colors.red),
-            SizedBox(width: 8),
-            Text('Payment Issues'),
-          ],
-        ),
-        content: Text('Multiple payment attempts have failed. Please contact support or try a different payment method.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Get.back();
-              Get.toNamed(Routes.subscriptionScreen);
-            },
-            child: Text('Update Payment'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Cancel'),
-          ),
-        ],
-      ),
-      barrierDismissible: false,
-    );
-  }
+  // Critical error dialog methods removed - using standard logging instead
 
   void _showOfflineModeDialog(String title, String message) {
     Get.dialog(
@@ -740,15 +515,5 @@ class SubscriptionErrorHandler {
     AppLogger.log('Subscription error handler disposed');
   }
 
-  /// Get error statistics for debugging
-  Map<String, dynamic> getErrorStatistics() {
-    return {
-      'totalErrors': _getErrorCount(),
-      'lastErrorTime': _getLastErrorTime()?.toIso8601String(),
-      'networkErrors': _storage.read(_networkErrorCountKey) ?? 0,
-      'paymentErrors': _storage.read(_paymentErrorCountKey) ?? 0,
-      'criticalErrors': (_storage.read(_criticalErrorsKey) ?? []).length,
-      'recentErrors': _storage.read('recent_errors') ?? [],
-    };
-  }
+  // Error statistics method removed - error tracking disabled
 }

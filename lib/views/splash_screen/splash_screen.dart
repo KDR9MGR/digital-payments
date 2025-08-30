@@ -9,6 +9,8 @@ import '../../routes/routes.dart';
 import '../../utils/storage_service.dart';
 import '../auth/user_provider.dart';
 import '../../controller/subscription_controller.dart';
+import '../../services/subscription_service.dart';
+import '../../screens/paywall_screen.dart';
 
 import '../../utils/custom_color.dart';
 import '../../utils/strings.dart';
@@ -237,22 +239,36 @@ class _SplashScreenState extends State<SplashScreen> {
 
           // Initialize subscription controller after user is loaded
           try {
-            Get.find<SubscriptionController>();
+            final subscriptionController = Get.find<SubscriptionController>();
+            final subscriptionService = Get.find<SubscriptionService>();
+            
             if (kDebugMode) {
-              debugPrint('💳 Subscription controller found and ready');
+              debugPrint('💳 Checking subscription status before dashboard access...');
+            }
+            
+            // Force refresh subscription status
+            final hasActiveSubscription = await subscriptionService.isUserSubscribed(forceRefresh: true);
+            
+            if (hasActiveSubscription) {
+              // User has valid subscription, proceed to dashboard
+              if (kDebugMode) {
+                debugPrint('✅ Valid subscription found, navigating to dashboard...');
+              }
+              Get.offAllNamed(Routes.dashboardScreen);
+            } else {
+              // User doesn't have subscription, redirect to paywall
+              if (kDebugMode) {
+                debugPrint('❌ No valid subscription, redirecting to paywall...');
+              }
+              Get.offAll(() => const PaywallScreen());
             }
           } catch (e) {
             if (kDebugMode) {
-              debugPrint('⚠️ Subscription controller not ready: $e');
+              debugPrint('⚠️ Error checking subscription: $e');
             }
-            // This is okay - controller will initialize on its own
+            // On error, redirect to paywall to be safe
+            Get.offAll(() => const PaywallScreen());
           }
-
-          // Navigate to dashboard
-          if (kDebugMode) {
-            debugPrint('🏠 Navigating to dashboard...');
-          }
-          Get.offAllNamed(Routes.dashboardScreen);
         } catch (e) {
           if (kDebugMode) {
             debugPrint('❌ Error fetching user details: $e');

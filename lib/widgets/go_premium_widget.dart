@@ -7,8 +7,10 @@ import '../routes/routes.dart';
 import '../screens/paywall_screen.dart';
 import '../controller/subscription_controller.dart';
 import '../services/platform_payment_service.dart';
+import '../services/subscription_service.dart';
+import '../utils/app_logger.dart';
 
-class GoPremiumWidget extends StatelessWidget {
+class GoPremiumWidget extends StatefulWidget {
   final bool showCloseButton;
   final VoidCallback? onClose;
   final EdgeInsetsGeometry? margin;
@@ -23,9 +25,61 @@ class GoPremiumWidget extends StatelessWidget {
   });
 
   @override
+  State<GoPremiumWidget> createState() => _GoPremiumWidgetState();
+}
+
+class _GoPremiumWidgetState extends State<GoPremiumWidget> {
+  final SubscriptionController _subscriptionController = Get.find<SubscriptionController>();
+  final SubscriptionService _subscriptionService = Get.find<SubscriptionService>();
+  bool _hasActiveSubscription = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSubscriptionStatus();
+  }
+
+  Future<void> _checkSubscriptionStatus() async {
+    try {
+      // Check both service and controller for subscription status
+      final serviceHasSubscription = await _subscriptionService.isUserSubscribed();
+      final controllerHasSubscription = _subscriptionController.hasActiveSubscription;
+      
+      final hasSubscription = serviceHasSubscription || controllerHasSubscription;
+      
+      if (mounted) {
+        setState(() {
+          _hasActiveSubscription = hasSubscription;
+          _isLoading = false;
+        });
+      }
+      
+      AppLogger.log('GoPremiumWidget: Subscription check - Service: $serviceHasSubscription, Controller: $controllerHasSubscription, Final: $hasSubscription');
+    } catch (e) {
+      AppLogger.log('GoPremiumWidget: Error checking subscription: $e');
+      if (mounted) {
+        setState(() {
+          _hasActiveSubscription = _subscriptionController.hasActiveSubscription;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Hide widget if user has active subscription
+    if (_hasActiveSubscription) {
+      return const SizedBox.shrink();
+    }
+    
+    // Show loading state briefly
+    if (_isLoading) {
+      return const SizedBox.shrink();
+    }
     return Container(
-      margin: margin ?? EdgeInsets.all(Dimensions.marginSize),
+      margin: widget.margin ?? EdgeInsets.all(Dimensions.marginSize),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -45,7 +99,7 @@ class GoPremiumWidget extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsets.all(
-              isCompact ? 12.0 : Dimensions.defaultPaddingSize,
+              widget.isCompact ? 12.0 : Dimensions.defaultPaddingSize,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -62,7 +116,7 @@ class GoPremiumWidget extends StatelessWidget {
                       child: Icon(
                         Icons.star,
                         color: Colors.white,
-                        size: isCompact ? 16 : 20,
+                        size: widget.isCompact ? 16 : 20,
                       ),
                     ),
                     SizedBox(width: 12.0),
@@ -70,7 +124,7 @@ class GoPremiumWidget extends StatelessWidget {
                       child: Text(
                         'Go Premium',
                         style:
-                            isCompact
+                            widget.isCompact
                                 ? CustomStyle.commonTextTitle.copyWith(
                                   color: CustomColor.primaryColor,
                                   fontWeight: FontWeight.w600,
@@ -84,7 +138,7 @@ class GoPremiumWidget extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (!isCompact) ...[
+                if (!widget.isCompact) ...[
                   SizedBox(height: 12.0),
                   Text(
                     'Unlock premium features for just \$1.99/month',
@@ -95,7 +149,7 @@ class GoPremiumWidget extends StatelessWidget {
                   SizedBox(height: 8.0),
                   _buildFeatureList(),
                 ],
-                SizedBox(height: isCompact ? 8.0 : 16.0),
+                SizedBox(height: widget.isCompact ? 8.0 : 16.0),
                 Row(
                   children: [
                     Expanded(
@@ -129,7 +183,7 @@ class GoPremiumWidget extends StatelessWidget {
                               backgroundColor: CustomColor.primaryColor,
                               foregroundColor: Colors.white,
                               padding: EdgeInsets.symmetric(
-                                vertical: isCompact ? 8 : 12,
+                                vertical: widget.isCompact ? 8 : 12,
                                 horizontal: 16.0,
                               ),
                               shape: RoundedRectangleBorder(
@@ -147,7 +201,7 @@ class GoPremiumWidget extends StatelessWidget {
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  isCompact
+                                  widget.isCompact
                                       ? 'View All Plans'
                                       : 'View All Plans',
                                   style: CustomStyle.commonTextTitle.copyWith(
@@ -161,7 +215,7 @@ class GoPremiumWidget extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (!isCompact) ...[
+                    if (!widget.isCompact) ...[
                       SizedBox(width: 12.0),
                       TextButton(
                         onPressed: () => _showFeatureDetails(context),
@@ -179,12 +233,12 @@ class GoPremiumWidget extends StatelessWidget {
               ],
             ),
           ),
-          if (showCloseButton)
+          if (widget.showCloseButton)
             Positioned(
               top: 4,
               right: 4,
               child: IconButton(
-                onPressed: onClose,
+                onPressed: widget.onClose,
                 icon: Icon(
                   Icons.close,
                   size: 18,
@@ -423,7 +477,7 @@ class GoPremiumWidget extends StatelessWidget {
 }
 
 /// Compact version of the Go Premium widget for smaller spaces
-class GoPremiumBanner extends StatelessWidget {
+class GoPremiumBanner extends StatefulWidget {
   final VoidCallback? onTap;
   final bool showCloseButton;
   final VoidCallback? onClose;
@@ -436,9 +490,49 @@ class GoPremiumBanner extends StatelessWidget {
   });
 
   @override
+  State<GoPremiumBanner> createState() => _GoPremiumBannerState();
+}
+
+class _GoPremiumBannerState extends State<GoPremiumBanner> {
+  final SubscriptionController _subscriptionController = Get.find<SubscriptionController>();
+  final SubscriptionService _subscriptionService = Get.find<SubscriptionService>();
+  bool _isLoading = true;
+  bool _hasActiveSubscription = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSubscriptionStatus();
+  }
+
+  Future<void> _checkSubscriptionStatus() async {
+    try {
+      // Check with both controller and service for most accurate status
+      final controllerStatus = _subscriptionController.hasActiveSubscription;
+      final serviceStatus = await _subscriptionService.isUserSubscribed();
+      
+      setState(() {
+        _hasActiveSubscription = controllerStatus || serviceStatus;
+        _isLoading = false;
+      });
+    } catch (e) {
+      // Fallback to controller status if service check fails
+      setState(() {
+        _hasActiveSubscription = _subscriptionController.hasActiveSubscription;
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Hide banner if user has active subscription or while loading
+    if (_isLoading || _hasActiveSubscription) {
+      return SizedBox.shrink();
+    }
+
     return GestureDetector(
-      onTap: onTap ?? () => Get.toNamed(Routes.subscriptionScreen),
+      onTap: widget.onTap ?? () => Get.toNamed(Routes.subscriptionScreen),
       child: Container(
         margin: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
         padding: EdgeInsets.all(12.0),
@@ -483,12 +577,12 @@ class GoPremiumBanner extends StatelessWidget {
                 Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
               ],
             ),
-            if (showCloseButton)
+            if (widget.showCloseButton)
               Positioned(
                 top: -4,
                 right: -4,
                 child: IconButton(
-                  onPressed: onClose,
+                  onPressed: widget.onClose,
                   icon: Icon(
                     Icons.close,
                     size: 16,

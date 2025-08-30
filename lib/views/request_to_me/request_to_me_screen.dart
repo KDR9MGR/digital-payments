@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:xpay/data/request_money_model.dart';
 import 'package:xpay/utils/utils.dart';
 import 'package:xpay/views/auth/user_provider.dart';
+import '../../services/subscription_error_handler.dart';
 
 import '../../routes/routes.dart';
 import '../../utils/custom_color.dart';
@@ -134,8 +135,13 @@ class _RequestToMeScreenState extends State<RequestToMeScreen> {
                 } catch (e) {
             // TODO: Add mounted check before using context in async function
                   Navigator.of(context).pop();
-                  Utils.showDialogMessage(
-                      context, 'Error', 'Failed to cancel request: $e');
+                  
+                  // Use proper error handling instead of showing raw exception
+                  await SubscriptionErrorHandler().handleSubscriptionError(
+                    errorType: 'payment_error',
+                    errorMessage: e.toString(),
+                    context: {'screen': 'request_to_me', 'action': 'cancel_request'},
+                  );
                 }
               }
             },

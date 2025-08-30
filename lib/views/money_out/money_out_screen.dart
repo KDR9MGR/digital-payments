@@ -9,6 +9,7 @@ import 'package:xpay/views/auth/wallet_view_model.dart';
 
 import '../../controller/money_out_controller.dart';
 import '../../controller/subscription_controller.dart';
+import '../../services/subscription_error_handler.dart';
 import '../../utils/custom_color.dart';
 import '../../utils/custom_style.dart';
 import '../../utils/dimensions.dart';
@@ -526,7 +527,13 @@ class _MoneyOutScreenState extends State<MoneyOutScreen>
               } catch (e) {
                 // TODO: Add mounted check before using context in async function
                 Navigator.pop(context); // Dismiss loading dialog on error
-                Utils.showDialogMessage(context, 'Error', '$e');
+                
+                // Use proper error handling instead of showing raw exception
+                await SubscriptionErrorHandler().handleSubscriptionError(
+                  errorType: 'payment_error',
+                  errorMessage: e.toString(),
+                  context: {'screen': 'money_out', 'action': 'send_money'},
+                );
               }
             }
           },

@@ -11,6 +11,7 @@ import '../widgets/bottom_navbar_widget.dart';
 import '../controller/subscription_controller.dart';
 import '../screens/paywall_screen.dart';
 import '../utils/app_logger.dart';
+import '../widgets/subscription_guard.dart';
 
 class NavigationScreen extends StatelessWidget {
   NavigationScreen({super.key});
@@ -18,14 +19,15 @@ class NavigationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      bottomNavigationBar: BottomNavBar(),
-      body: Obx(
-        () => IndexedStack(
-          index: _controller.currentIndex.value,
-          children: [DashboardScreen(), const IndexScreen()],
+    return SubscriptionGuard(
+      child: Scaffold(
+        bottomNavigationBar: BottomNavBar(),
+        body: Obx(
+          () => IndexedStack(
+            index: _controller.currentIndex.value,
+            children: [DashboardScreen(), const IndexScreen()],
+          ),
         ),
-      ),
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
@@ -57,8 +59,9 @@ class NavigationScreen extends StatelessWidget {
           ),
           SizedBox(height: Dimensions.heightSize * 0.5),
         ],
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 

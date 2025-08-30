@@ -7,13 +7,11 @@ import '../utils/app_logger.dart';
 /// Widget that displays real-time subscription status
 /// Automatically updates when subscription status changes
 class SubscriptionStatusWidget extends StatefulWidget {
-  final Widget Function(bool hasSubscription, bool isInGracePeriod) builder;
-  final bool showGracePeriodInfo;
+  final Widget Function(bool hasSubscription) builder;
   
   const SubscriptionStatusWidget({
     super.key,
     required this.builder,
-    this.showGracePeriodInfo = false,
   });
 
   @override
@@ -24,7 +22,6 @@ class _SubscriptionStatusWidgetState extends State<SubscriptionStatusWidget> {
   final SubscriptionService _subscriptionService = Get.find<SubscriptionService>();
   StreamSubscription<bool>? _subscriptionStatusSubscription;
   bool _hasSubscription = false;
-  bool _isInGracePeriod = false;
 
   @override
   void initState() {
@@ -41,7 +38,6 @@ class _SubscriptionStatusWidgetState extends State<SubscriptionStatusWidget> {
 
   void _initializeStatus() {
     _hasSubscription = _subscriptionService.hasActiveSubscription;
-    _isInGracePeriod = _subscriptionService.isInGracePeriod;
   }
 
   void _listenToSubscriptionChanges() {
@@ -49,16 +45,15 @@ class _SubscriptionStatusWidgetState extends State<SubscriptionStatusWidget> {
       if (mounted) {
         setState(() {
           _hasSubscription = hasSubscription;
-          _isInGracePeriod = _subscriptionService.isInGracePeriod;
         });
-        AppLogger.log('Subscription status widget updated: hasSubscription=$hasSubscription, isInGracePeriod=$_isInGracePeriod');
+        AppLogger.log('Subscription status widget updated: hasSubscription=$hasSubscription');
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return widget.builder(_hasSubscription, _isInGracePeriod);
+    return widget.builder(_hasSubscription);
   }
 }
 
@@ -76,19 +71,15 @@ class SubscriptionStatusIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SubscriptionStatusWidget(
-      builder: (hasSubscription, isInGracePeriod) {
+      builder: (hasSubscription) {
         Color statusColor;
         String statusText;
         IconData statusIcon;
         
-        if (hasSubscription && !isInGracePeriod) {
+        if (hasSubscription) {
           statusColor = Colors.green;
           statusText = 'Premium Active';
           statusIcon = Icons.verified;
-        } else if (isInGracePeriod) {
-          statusColor = Colors.orange;
-          statusText = 'Grace Period';
-          statusIcon = Icons.warning;
         } else {
           statusColor = Colors.grey;
           statusText = 'Free Plan';
@@ -129,72 +120,4 @@ class SubscriptionStatusIndicator extends StatelessWidget {
   }
 }
 
-/// Grace period warning widget
-class GracePeriodWarning extends StatelessWidget {
-  const GracePeriodWarning({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SubscriptionStatusWidget(
-      showGracePeriodInfo: true,
-      builder: (hasSubscription, isInGracePeriod) {
-        if (!isInGracePeriod) {
-          return const SizedBox.shrink();
-        }
-        
-        final subscriptionService = Get.find<SubscriptionService>();
-        final gracePeriodEnd = subscriptionService.gracePeriodEnd;
-        final daysLeft = gracePeriodEnd?.difference(DateTime.now()).inDays ?? 0;
-        
-        return Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.warning,
-                color: Colors.orange,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Grace Period Active',
-                      style: TextStyle(
-                        color: Colors.orange,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      '$daysLeft days remaining. Renew to continue premium features.',
-                      style: TextStyle(
-                        color: Colors.orange.shade700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton(
-                onPressed: () => Get.toNamed('/subscription'),
-                child: Text(
-                  'Renew',
-                  style: TextStyle(color: Colors.orange),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
+/// Removed GracePeriodWarning widget - grace period functionality eliminated

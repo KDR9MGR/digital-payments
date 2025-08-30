@@ -8,6 +8,8 @@ import '../../routes/routes.dart';
 
 import '../../controller/dashboard_controller.dart';
 import '../../controller/subscription_controller.dart';
+import '../../services/subscription_service.dart';
+import '../../screens/paywall_screen.dart';
 import '../../utils/custom_color.dart';
 
 import '../../widgets/navigation_drawer_widget.dart';
@@ -44,6 +46,28 @@ class _DashboardScreenState extends State<DashboardScreen>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.forward();
+    
+    // Verify subscription status on dashboard access
+    _verifySubscriptionAccess();
+  }
+  
+  Future<void> _verifySubscriptionAccess() async {
+    try {
+      final subscriptionService = Get.find<SubscriptionService>();
+      final hasActiveSubscription = await subscriptionService.isUserSubscribed(forceRefresh: true);
+      
+      if (!hasActiveSubscription) {
+        // User doesn't have subscription, redirect to paywall
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Get.offAll(() => const PaywallScreen());
+        });
+      }
+    } catch (e) {
+      // On error, redirect to paywall to be safe
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Get.offAll(() => const PaywallScreen());
+      });
+    }
   }
 
   @override
@@ -71,7 +95,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                     children: [
                       SizedBox(height: 24),
                       _subscriptionStatusBanner(context),
-                      GracePeriodWarning(),
                       SizedBox(height: 24),
                       _quickActionsWidget(context, controller),
                       SizedBox(height: 32),
@@ -865,26 +888,21 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 20),
       child: SubscriptionStatusWidget(
-        builder: (hasSubscription, isInGracePeriod) {
+        builder: (hasSubscription) {
           return Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: hasSubscription && !isInGracePeriod
+                colors: hasSubscription
                     ? [
                         CustomColor.successColor.withValues(alpha: 0.8),
                         CustomColor.successColor.withValues(alpha: 0.6),
                       ]
-                    : isInGracePeriod
-                        ? [
-                            Colors.orange.withValues(alpha: 0.8),
-                            Colors.orange.withValues(alpha: 0.6),
-                          ]
-                        : [
-                            CustomColor.primaryColor.withValues(alpha: 0.8),
-                            CustomColor.primaryColor.withValues(alpha: 0.6),
-                          ],
+                    : [
+                        CustomColor.primaryColor.withValues(alpha: 0.8),
+                        CustomColor.primaryColor.withValues(alpha: 0.6),
+                      ],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
@@ -920,11 +938,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ),
                         ),
                         child: Icon(
-                          hasSubscription && !isInGracePeriod
+                          hasSubscription
                               ? Icons.star_rounded
-                              : isInGracePeriod
-                                  ? Icons.warning_rounded
-                                  : Icons.diamond_outlined,
+                              : Icons.diamond_outlined,
                           color: Colors.white,
                           size: 28,
                         ),
@@ -937,18 +953,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                             Row(
                               children: [
                                 Text(
-                                  hasSubscription && !isInGracePeriod
+                                  hasSubscription
                                       ? 'Premium Active'
-                                      : isInGracePeriod
-                                          ? 'Grace Period'
-                                          : 'Go Premium',
+                                      : 'Go Premium',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                if (hasSubscription || isInGracePeriod) ...[
+                                if (hasSubscription) ...[
                                   SizedBox(width: 8),
                                   Container(
                                     padding: EdgeInsets.symmetric(
@@ -960,7 +974,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
-                                      isInGracePeriod ? 'GRACE' : 'ACTIVE',
+                                      'ACTIVE',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 10,
@@ -973,11 +987,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ),
                             SizedBox(height: 4),
                             Text(
-                              hasSubscription && !isInGracePeriod
+                              hasSubscription
                                   ? 'Enjoying all premium features • \$1.99/month'
-                                  : isInGracePeriod
-                                      ? 'Renew to continue premium features'
-                                      : 'Unlock premium features for just \$1.99/month',
+                                  : 'Unlock premium features for just \$1.99/month',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.8),
                                 fontSize: 13,
