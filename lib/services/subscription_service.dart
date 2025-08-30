@@ -802,10 +802,7 @@ class SubscriptionService {
     return _storage.read(_subscriptionStatusKey) ?? false;
   }
 
-  /// Check if user has emergency access
-  bool hasEmergencyAccess() {
-    return _fallbackService.hasEmergencyAccess();
-  }
+
 
   /// Check if user is in offline grace period
   bool isInOfflineGracePeriod() {

@@ -678,7 +678,8 @@ class SubscriptionController extends GetxController {
       );
       
       if (!subscriptionValidation['success']) {
-        Get.snackbar('Error', subscriptionValidation['error']);
+        // Log validation error silently without showing user prompt
+        AppLogger.log('Subscription validation failed: ${subscriptionValidation['error']}');
         PaymentValidationService.endPaymentSession();
         return;
       }
@@ -700,7 +701,8 @@ class SubscriptionController extends GetxController {
         );
         
         if (!paymentValidation['success']) {
-          Get.snackbar('Error', 'Payment validation failed: ${paymentValidation['error']}');
+          // Log payment validation error silently without showing user prompt
+          AppLogger.log('Payment validation failed: ${paymentValidation['error']}');
           PaymentValidationService.endPaymentSession();
           return;
         }

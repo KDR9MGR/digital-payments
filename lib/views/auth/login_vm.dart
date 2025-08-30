@@ -138,36 +138,36 @@ class LoginViewModel extends BaseViewModel {
 
   Future<String> resetPassword(String email) async {
     if (_auth == null) {
+      debugPrint('Firebase Auth is not initialized');
       return 'Firebase Auth is not initialized. Please restart the app.';
     }
+    
+    debugPrint('Attempting to send password reset email to: $email');
+    
     try {
       await _auth!.sendPasswordResetEmail(email: email);
+      debugPrint('Password reset email sent successfully to: $email');
     } on FirebaseAuthException catch (e) {
-      debugPrint('signInError: $e');
-      if (e.code == 'email-already-in-use') {
-        return 'The email address is already in use.';
-      } else if (e.code == 'user-disabled') {
-        return 'The user account has been disabled.';
-      } else if (e.code == 'user-not-found') {
-        return 'No user found for that email.';
-      } else if (e.code == 'wrong-password') {
-        return 'Wrong password provided for that user.';
+      debugPrint('FirebaseAuthException during password reset: ${e.code} - ${e.message}');
+      if (e.code == 'user-not-found') {
+        return 'No user found for that email address.';
       } else if (e.code == 'invalid-email') {
         return 'The email address is not formatted correctly.';
-      } else if (e.code == 'invalid-credential') {
-        return 'The supplied auth credential is malformed or has expired. Please check your email and password.';
-      } else if (e.code == 'weak-password') {
-        return 'The password provided is not strong enough.';
-      } else if (e.code == 'operation-not-allowed') {
-        return 'This sign-in method is not enabled.';
+      } else if (e.code == 'user-disabled') {
+        return 'The user account has been disabled.';
       } else if (e.code == 'too-many-requests') {
         return 'Too many requests. Please try again later.';
+      } else if (e.code == 'operation-not-allowed') {
+        return 'Password reset is not enabled. Please contact support.';
+      } else if (e.code == 'missing-email') {
+        return 'Please enter an email address.';
       } else {
-        return 'Error signing in: ${e.message}';
+        debugPrint('Unhandled FirebaseAuthException: ${e.code} - ${e.message}');
+        return 'Error sending password reset email: ${e.message}';
       }
     } catch (e) {
-      debugPrint('Error signing in: $e');
-      return 'Error signing in: $e';
+      debugPrint('General error during password reset: $e');
+      return 'Error sending password reset email: $e';
     } finally {
       notifyListeners();
     }

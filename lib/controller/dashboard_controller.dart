@@ -180,7 +180,7 @@ class DashboardController extends GetxController {
       if (hasActiveSubscription) {
         navigation();
       } else {
-        // Show paywall immediately
+        // Show paywall but allow going back
         Get.to(
           () => const PaywallScreen(),
           fullscreenDialog: true,
@@ -189,12 +189,8 @@ class DashboardController extends GetxController {
       }
     } catch (e) {
       AppLogger.log('Error checking subscription: $e');
-      // Show paywall on error to be safe
-      Get.to(
-        () => const PaywallScreen(),
-        fullscreenDialog: true,
-        transition: Transition.cupertino,
-      );
+      // On error, allow user to continue - don't force paywall
+      navigation();
     }
   }
 

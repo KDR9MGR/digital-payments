@@ -4,6 +4,8 @@ import '../../utils/error_debug_helper.dart';
 import '../../services/subscription_error_handler.dart';
 
 class ErrorDebugScreen extends StatefulWidget {
+  const ErrorDebugScreen({super.key});
+
   @override
   _ErrorDebugScreenState createState() => _ErrorDebugScreenState();
 }
@@ -31,7 +33,7 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
 
     try {
       ErrorDebugHelper.clearAllErrors();
-      
+
       // Show success message
       Get.snackbar(
         'Success',
@@ -41,7 +43,7 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
         colorText: Colors.white,
         duration: Duration(seconds: 2),
       );
-      
+
       // Reload stats
       _loadErrorStats();
     } catch (e) {
@@ -82,23 +84,28 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
               ),
             ),
             SizedBox(height: 20),
-            
+
             // Clear Errors Button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: isLoading ? null : _clearAllErrors,
-                icon: isLoading 
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Icon(Icons.clear_all),
-                label: Text(isLoading ? 'Clearing...' : 'Clear All Error Counts'),
+                icon:
+                    isLoading
+                        ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                        : Icon(Icons.clear_all),
+                label: Text(
+                  isLoading ? 'Clearing...' : 'Clear All Error Counts',
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
@@ -106,9 +113,9 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
                 ),
               ),
             ),
-            
+
             SizedBox(height: 20),
-            
+
             // Refresh Button
             SizedBox(
               width: double.infinity,
@@ -123,19 +130,16 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
                 ),
               ),
             ),
-            
+
             SizedBox(height: 30),
-            
+
             // Error Statistics
             Text(
               'Current Error Statistics',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 15),
-            
+
             Expanded(
               child: Card(
                 child: Padding(
@@ -143,14 +147,30 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildStatRow('Total Errors', errorStats['totalErrors']?.toString() ?? '0'),
-                      _buildStatRow('Network Errors', errorStats['networkErrors']?.toString() ?? '0'),
-                      _buildStatRow('Payment Errors', errorStats['paymentErrors']?.toString() ?? '0'),
-                      _buildStatRow('Last Error Time', errorStats['lastErrorTime'] ?? 'None'),
-                      _buildStatRow('Recent Errors Count', ((errorStats['recentErrors'] as List?) ?? []).length.toString()),
-                      
+                      _buildStatRow(
+                        'Total Errors',
+                        errorStats['totalErrors']?.toString() ?? '0',
+                      ),
+                      _buildStatRow(
+                        'Network Errors',
+                        errorStats['networkErrors']?.toString() ?? '0',
+                      ),
+                      _buildStatRow(
+                        'Payment Errors',
+                        errorStats['paymentErrors']?.toString() ?? '0',
+                      ),
+                      _buildStatRow(
+                        'Last Error Time',
+                        errorStats['lastErrorTime'] ?? 'None',
+                      ),
+                      _buildStatRow(
+                        'Recent Errors Count',
+                        ((errorStats['recentErrors'] as List?) ?? []).length
+                            .toString(),
+                      ),
+
                       SizedBox(height: 20),
-                      
+
                       // Recent Errors List
                       Text(
                         'Recent Errors:',
@@ -160,10 +180,8 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
                         ),
                       ),
                       SizedBox(height: 10),
-                      
-                      Expanded(
-                        child: _buildRecentErrorsList(),
-                      ),
+
+                      Expanded(child: _buildRecentErrorsList()),
                     ],
                   ),
                 ),
@@ -174,44 +192,39 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
       ),
     );
   }
-  
+
   Widget _buildStatRow(String label, String value) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label + ':',
-            style: TextStyle(fontWeight: FontWeight.w500),
-          ),
+          Text('$label:', style: TextStyle(fontWeight: FontWeight.w500)),
           Text(
             value,
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: value == '0' || value == 'None' ? Colors.green : Colors.red,
+              color:
+                  value == '0' || value == 'None' ? Colors.green : Colors.red,
             ),
           ),
         ],
       ),
     );
   }
-  
+
   Widget _buildRecentErrorsList() {
     final recentErrors = (errorStats['recentErrors'] as List?) ?? [];
-    
+
     if (recentErrors.isEmpty) {
       return Center(
         child: Text(
           'No recent errors',
-          style: TextStyle(
-            color: Colors.green,
-            fontStyle: FontStyle.italic,
-          ),
+          style: TextStyle(color: Colors.green, fontStyle: FontStyle.italic),
         ),
       );
     }
-    
+
     return ListView.builder(
       itemCount: recentErrors.length,
       itemBuilder: (context, index) {
@@ -220,17 +233,10 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
           margin: EdgeInsets.symmetric(vertical: 2),
           child: ListTile(
             dense: true,
-            leading: Icon(
-              Icons.error_outline,
-              color: Colors.red,
-              size: 20,
-            ),
+            leading: Icon(Icons.error_outline, color: Colors.red, size: 20),
             title: Text(
               error['type'] ?? 'Unknown',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -243,10 +249,7 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
                 ),
                 Text(
                   error['timestamp'] ?? '',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 10, color: Colors.grey),
                 ),
               ],
             ),

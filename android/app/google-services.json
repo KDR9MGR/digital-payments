@@ -8,9 +8,45 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1086070277189:android:f79b886769286e91f68f2c",
+        "mobilesdk_app_id": "1:1086070277189:android:41c27a2524b84540f68f2c",
         "android_client_info": {
           "package_name": "com.digitalpayments"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1086070277189-754c8bmmnpk94qtq4ct0udo5bnmjmegk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiqxuM2cVSi5R6uml8sCV9LLKxAd_aWNM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1086070277189-754c8bmmnpk94qtq4ct0udo5bnmjmegk.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1086070277189-f3fc7p7aj5dh9jcfvt4nm32e69i5d14k.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.digitalpayments"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086070277189:android:f79b886769286e91f68f2c",
+        "android_client_info": {
+          "package_name": "com.getdigitalpayments"
         }
       },
       "oauth_client": [
@@ -18,7 +54,7 @@
           "client_id": "1086070277189-8qqqsn67do7rk02lh3ba0q31acesq0eo.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.digitalpayments",
+            "package_name": "com.getdigitalpayments",
             "certificate_hash": "f40251e5e22dc26ced0c8116a8568bdf72d3582e"
           }
         },
@@ -43,7 +79,7 @@
               "client_id": "1086070277189-f3fc7p7aj5dh9jcfvt4nm32e69i5d14k.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.getdigitalpayments"
+                "bundle_id": "com.digitalpayments"
               }
             }
           ]
@@ -79,7 +115,7 @@
               "client_id": "1086070277189-f3fc7p7aj5dh9jcfvt4nm32e69i5d14k.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.getdigitalpayments"
+                "bundle_id": "com.digitalpayments"
               }
             }
           ]

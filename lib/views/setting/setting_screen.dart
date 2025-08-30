@@ -4,7 +4,6 @@ import 'package:get/get.dart';
 import '../../controller/settings_controller.dart';
 import '../../routes/routes.dart';
 import '../../services/video_settings_service.dart';
-import '../../services/subscription_error_handler.dart';
 import '../../utils/error_debug_helper.dart';
 import '../../utils/custom_color.dart';
 import '../../utils/custom_style.dart';
@@ -141,7 +140,7 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _videoMuteToggleWidget() {
     final videoSettingsService = Get.find<VideoSettingsService>();
-    
+
     return Container(
       padding: const EdgeInsets.all(15),
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -175,15 +174,17 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
-          Obx(() => Switch(
-             value: videoSettingsService.isVideoMutedStream.value,
-             onChanged: (value) {
-               videoSettingsService.setVideoMute(value);
-             },
-            activeThumbColor: CustomColor.primaryColor,
-            inactiveThumbColor: Colors.grey,
-            inactiveTrackColor: Colors.grey.withValues(alpha: 0.3),
-          )),
+          Obx(
+            () => Switch(
+              value: videoSettingsService.isVideoMutedStream.value,
+              onChanged: (value) {
+                videoSettingsService.setVideoMute(value);
+              },
+              activeThumbColor: CustomColor.primaryColor,
+              inactiveThumbColor: Colors.grey,
+              inactiveTrackColor: Colors.grey.withValues(alpha: 0.3),
+            ),
+          ),
         ],
       ),
     );
@@ -192,12 +193,12 @@ class SettingsScreen extends StatelessWidget {
   Widget _debugErrorManagementWidget() {
     final errorStats = ErrorDebugHelper.getErrorStats();
     final totalErrors = errorStats['totalErrors'] ?? 0;
-    
+
     // Only show if there are errors to clear
     if (totalErrors == 0) {
       return SizedBox.shrink();
     }
-    
+
     return settingsItemWidget(
       Get.find<SettingsController>(),
       onTap: () {
@@ -232,11 +233,11 @@ class SettingsScreen extends StatelessWidget {
                     width: 1,
                   )
                   : isDestructive
-                      ? Border.all(
-                        color: Colors.red.withValues(alpha: 0.3),
-                        width: 1,
-                      )
-                      : null,
+                  ? Border.all(
+                    color: Colors.red.withValues(alpha: 0.3),
+                    width: 1,
+                  )
+                  : null,
         ),
         child: Row(
           children: [
@@ -246,11 +247,11 @@ class SettingsScreen extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   color:
-                    isPremium
-                        ? CustomColor.primaryColor.withValues(alpha: 0.2)
-                        : isDestructive
-                            ? Colors.red.withValues(alpha: 0.2)
-                            : Colors.white.withValues(alpha: 0.1),
+                      isPremium
+                          ? CustomColor.primaryColor.withValues(alpha: 0.2)
+                          : isDestructive
+                          ? Colors.red.withValues(alpha: 0.2)
+                          : Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -259,8 +260,8 @@ class SettingsScreen extends StatelessWidget {
                       isPremium
                           ? CustomColor.primaryColor
                           : isDestructive
-                              ? Colors.red
-                              : Colors.white.withValues(alpha: 0.8),
+                          ? Colors.red
+                          : Colors.white.withValues(alpha: 0.8),
                   size: 20,
                 ),
               ),

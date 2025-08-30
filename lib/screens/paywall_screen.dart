@@ -222,11 +222,27 @@ class _PaywallScreenState extends State<PaywallScreen> {
             color: Theme.of(context).colorScheme.onSurface,
             size: 28,
           ),
-          onPressed: () => Get.back(),
+          onPressed: () {
+            // Ensure we can always go back
+            if (Navigator.canPop(context)) {
+              Get.back();
+            } else {
+              // If no previous route, go to dashboard
+              Get.offAllNamed('/dashboardScreen');
+            }
+          },
         ),
         actions: [
           TextButton(
-            onPressed: () => Get.back(),
+            onPressed: () {
+              // Ensure we can always go back
+              if (Navigator.canPop(context)) {
+                Get.back();
+              } else {
+                // If no previous route, go to dashboard
+                Get.offAllNamed('/dashboardScreen');
+              }
+            },
             child: Text(
               'Skip',
               style: TextStyle(

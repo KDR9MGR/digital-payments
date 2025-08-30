@@ -19,7 +19,6 @@ import '../../widgets/inputs/phone_number_with_contry_code_input.dart';
 import '../../widgets/inputs/text_field_input_widget.dart';
 import '../../widgets/inputs/text_label_widget.dart';
 import '../../widgets/primary_appbar.dart';
-import '../../widgets/snackbar/custom_snackbar.dart';
 import '../auth/user_provider.dart';
 
 class UpdateProfileScreen extends StatefulWidget {
@@ -297,12 +296,15 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
             } catch (e) {
               if (context.mounted) {
                 Navigator.pop(context);
-                
+
                 // Use proper error handling instead of showing raw exception
                 await SubscriptionErrorHandler().handleSubscriptionError(
                   errorType: 'payment_error',
                   errorMessage: e.toString(),
-                  context: {'screen': 'update_profile', 'action': 'update_profile'},
+                  context: {
+                    'screen': 'update_profile',
+                    'action': 'update_profile',
+                  },
                 );
               }
             }

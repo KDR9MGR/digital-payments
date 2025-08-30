@@ -237,38 +237,11 @@ class _SplashScreenState extends State<SplashScreen> {
             }
           }
 
-          // Initialize subscription controller after user is loaded
-          try {
-            final subscriptionController = Get.find<SubscriptionController>();
-            final subscriptionService = Get.find<SubscriptionService>();
-            
-            if (kDebugMode) {
-              debugPrint('💳 Checking subscription status before dashboard access...');
-            }
-            
-            // Force refresh subscription status
-            final hasActiveSubscription = await subscriptionService.isUserSubscribed(forceRefresh: true);
-            
-            if (hasActiveSubscription) {
-              // User has valid subscription, proceed to dashboard
-              if (kDebugMode) {
-                debugPrint('✅ Valid subscription found, navigating to dashboard...');
-              }
-              Get.offAllNamed(Routes.dashboardScreen);
-            } else {
-              // User doesn't have subscription, redirect to paywall
-              if (kDebugMode) {
-                debugPrint('❌ No valid subscription, redirecting to paywall...');
-              }
-              Get.offAll(() => const PaywallScreen());
-            }
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint('⚠️ Error checking subscription: $e');
-            }
-            // On error, redirect to paywall to be safe
-            Get.offAll(() => const PaywallScreen());
+          // Navigate directly to dashboard - subscription checks will happen when features are accessed
+          if (kDebugMode) {
+            debugPrint('✅ User logged in, navigating to dashboard...');
           }
+          Get.offAllNamed(Routes.dashboardScreen);
         } catch (e) {
           if (kDebugMode) {
             debugPrint('❌ Error fetching user details: $e');

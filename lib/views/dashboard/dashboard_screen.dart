@@ -10,6 +10,7 @@ import '../../controller/dashboard_controller.dart';
 import '../../controller/subscription_controller.dart';
 import '../../services/subscription_service.dart';
 import '../../screens/paywall_screen.dart';
+import '../../utils/app_logger.dart';
 import '../../utils/custom_color.dart';
 
 import '../../widgets/navigation_drawer_widget.dart';
@@ -46,29 +47,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.forward();
-    
-    // Verify subscription status on dashboard access
-    _verifySubscriptionAccess();
   }
   
-  Future<void> _verifySubscriptionAccess() async {
-    try {
-      final subscriptionService = Get.find<SubscriptionService>();
-      final hasActiveSubscription = await subscriptionService.isUserSubscribed(forceRefresh: true);
-      
-      if (!hasActiveSubscription) {
-        // User doesn't have subscription, redirect to paywall
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          Get.offAll(() => const PaywallScreen());
-        });
-      }
-    } catch (e) {
-      // On error, redirect to paywall to be safe
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Get.offAll(() => const PaywallScreen());
-      });
-    }
-  }
+  // Removed automatic subscription verification - features will check individually
 
   @override
   void dispose() {

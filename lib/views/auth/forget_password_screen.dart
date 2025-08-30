@@ -141,26 +141,37 @@ class ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
             final errorMessage = await _loginViewModel!.resetPassword(
               emailController.text.trim(),
             );
+            
+            if (!mounted) return;
+            Navigator.pop(context);
+            
             if (errorMessage.isNotEmpty) {
-              // TODO: Add mounted check before using context in async function
-              Navigator.pop(context);
               Utils.showDialogMessage(
                 context,
-                'Error resetting password',
+                'Password Reset Error',
                 errorMessage,
               );
             } else {
-              // TODO: Add mounted check before using context in async function
-              Navigator.pop(context);
               Utils.showDialogMessage(
                 context,
-                'Success',
-                'If you have an account with us, we will send an email with instructions',
+                'Password Reset Email Sent',
+                'If an account exists with this email address, you will receive password reset instructions. Please check your email (including spam folder).',
               );
+              // Navigate back to login screen after successful request
+              Future.delayed(const Duration(seconds: 2), () {
+                if (mounted) {
+                  Navigator.pop(context);
+                }
+              });
             }
           } catch (exception) {
-            // TODO: Add mounted check before using context in async function
+            if (!mounted) return;
             Navigator.pop(context);
+            Utils.showDialogMessage(
+              context,
+              'Error',
+              'An unexpected error occurred. Please try again.',
+            );
           }
         }
       },

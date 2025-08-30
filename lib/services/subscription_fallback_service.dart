@@ -23,12 +23,10 @@ class SubscriptionFallbackService {
   static const String _validationFailureCountKey = 'validation_failure_count';
   static const String _lastValidationAttemptKey = 'last_validation_attempt';
   static const String _offlineSubscriptionDataKey = 'offline_subscription_data';
-  static const String _emergencyAccessKey = 'emergency_access_granted';
   static const String _platformReceiptBackupKey = 'platform_receipt_backup';
 
   // Fallback configuration
   static const int _maxValidationFailures = 5;
-  static const Duration _emergencyAccessDuration = Duration(hours: 24);
   static const Duration _offlineGracePeriod = Duration(days: 3);
 
   /// Initialize fallback service
@@ -80,14 +78,6 @@ class SubscriptionFallbackService {
       if (await _tryOfflineGracePeriod(userId, lastKnownSubscriptionData)) {
         AppLogger.log('Fallback successful: Offline grace period activated');
         return true;
-      }
-      
-      // Strategy 5: Emergency access (last resort)
-      if (failureCount >= _maxValidationFailures) {
-        if (await _grantEmergencyAccess(userId)) {
-          AppLogger.log('Fallback successful: Emergency access granted');
-          return true;
-        }
       }
       
       AppLogger.log('All fallback strategies failed');
@@ -252,32 +242,7 @@ class SubscriptionFallbackService {
     }
   }
 
-  /// Strategy 5: Grant emergency access
-  Future<bool> _grantEmergencyAccess(String userId) async {
-    try {
-      AppLogger.log('Granting emergency access...');
-      
-      final emergencyAccessData = {
-        'grantedAt': DateTime.now().millisecondsSinceEpoch,
-        'expiresAt': DateTime.now().add(_emergencyAccessDuration).millisecondsSinceEpoch,
-        'userId': userId,
-        'reason': 'Multiple validation failures',
-      };
-      
-      _storage.write(_emergencyAccessKey, emergencyAccessData);
-      
-      // Show user notification about emergency access
-      _showEmergencyAccessNotification();
-      
-      // Log this event for monitoring
-      AppLogger.log('Emergency access granted to user: $userId');
-      
-      return true;
-    } catch (e) {
-      AppLogger.log('Emergency access grant failed: $e');
-      return false;
-    }
-  }
+
 
   /// Validate Apple receipt as fallback
   Future<bool> _validateAppleReceiptFallback(Map<String, dynamic> receiptData, String userId) async {
@@ -305,27 +270,7 @@ class SubscriptionFallbackService {
     }
   }
 
-  /// Check if user has emergency access
-  bool hasEmergencyAccess() {
-    try {
-      final emergencyData = _storage.read(_emergencyAccessKey);
-      if (emergencyData == null) return false;
-      
-      final data = Map<String, dynamic>.from(emergencyData);
-      final expiresAt = DateTime.fromMillisecondsSinceEpoch(data['expiresAt']);
-      
-      if (DateTime.now().isBefore(expiresAt)) {
-        return true;
-      } else {
-        // Emergency access expired, clear it
-        _storage.remove(_emergencyAccessKey);
-        return false;
-      }
-    } catch (e) {
-      AppLogger.log('Error checking emergency access: $e');
-      return false;
-    }
-  }
+
 
   /// Check if in offline grace period
   bool isInOfflineGracePeriod() {
@@ -369,16 +314,6 @@ class SubscriptionFallbackService {
   /// Clean up expired fallback data
   Future<void> _cleanupExpiredFallbackData() async {
     try {
-      // Clean up expired emergency access
-      final emergencyData = _storage.read(_emergencyAccessKey);
-      if (emergencyData != null) {
-        final data = Map<String, dynamic>.from(emergencyData);
-        final expiresAt = DateTime.fromMillisecondsSinceEpoch(data['expiresAt']);
-        if (DateTime.now().isAfter(expiresAt)) {
-          _storage.remove(_emergencyAccessKey);
-        }
-      }
-      
       // Clean up expired offline grace period
       final offlineData = _storage.read(_offlineSubscriptionDataKey);
       if (offlineData != null) {
@@ -409,28 +344,7 @@ class SubscriptionFallbackService {
     );
   }
 
-  /// Show emergency access notification
-  void _showEmergencyAccessNotification() {
-    Get.snackbar(
-      'Emergency Access Granted',
-      'Temporary access granted due to validation issues. Please check your connection and contact support if this persists.',
-      snackPosition: SnackPosition.TOP,
-      backgroundColor: Get.theme.colorScheme.error,
-      colorText: Get.theme.colorScheme.onError,
-      duration: const Duration(seconds: 8),
-      isDismissible: true,
-      mainButton: TextButton(
-        onPressed: () {
-          Get.back();
-          // Navigate to support or settings
-        },
-        child: Text(
-          'Contact Support',
-          style: TextStyle(color: Get.theme.colorScheme.onError),
-        ),
-      ),
-    );
-  }
+
 
   /// Store platform receipt for fallback validation
   void storePlatformReceipt(Map<String, dynamic> receiptData) {
@@ -445,7 +359,6 @@ class SubscriptionFallbackService {
   /// Get fallback status summary
   Map<String, dynamic> getFallbackStatus() {
     return {
-      'hasEmergencyAccess': hasEmergencyAccess(),
       'isInOfflineGracePeriod': isInOfflineGracePeriod(),
       'validationFailureCount': _storage.read(_validationFailureCountKey) ?? 0,
       'lastValidationAttempt': _storage.read(_lastValidationAttemptKey),
