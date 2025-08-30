@@ -1,0 +1,25 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1E90FF;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#4169E1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8A2BE2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" fill="white"/>
+  
+  <!-- Main D shape -->
+  <path d="M 80 80 L 280 80 C 380 80 432 132 432 232 C 432 332 380 384 280 384 L 80 384 Z" fill="url(#blueGradient)"/>
+  
+  <!-- Horizontal lines inside D -->
+  <rect x="120" y="140" width="200" height="16" fill="white" rx="8"/>
+  <rect x="120" y="180" width="160" height="16" fill="white" rx="8"/>
+  <rect x="120" y="220" width="180" height="16" fill="white" rx="8"/>
+  <rect x="120" y="260" width="140" height="16" fill="white" rx="8"/>
+  <rect x="120" y="300" width="160" height="16" fill="white" rx="8"/>
+  
+  <!-- DP text -->
+  <text x="256" y="460" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="url(#blueGradient)">DP</text>
+</svg>
