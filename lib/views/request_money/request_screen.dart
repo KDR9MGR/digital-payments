@@ -92,8 +92,8 @@ class _RequestMoneyScreenState extends State<RequestMoneyScreen>
         ),
       ),
       body: SubscriptionGuard(
-         customMessage: 'Request Money feature requires a premium subscription',
-         child: FadeTransition(
+        customMessage: 'Request Money feature requires a premium subscription',
+        child: FadeTransition(
           opacity: _fadeAnimation,
           child: SizedBox(
             height: MediaQuery.of(context).size.height,
@@ -465,7 +465,6 @@ class _RequestMoneyScreenState extends State<RequestMoneyScreen>
                       : controller.optionalNoteController.text.trim(),
                 );
                 if (context.mounted) {
-                  // TODO: Add mounted check before using context in async function
                   Navigator.pop(context);
                   Utils.showDialogMessage(
                     context,
@@ -478,14 +477,16 @@ class _RequestMoneyScreenState extends State<RequestMoneyScreen>
                 }
               } catch (error) {
                 if (context.mounted) {
-                  // TODO: Add mounted check before using context in async function
                   Navigator.pop(context);
-                  
+
                   // Use proper error handling instead of showing raw exception
                   await SubscriptionErrorHandler().handleSubscriptionError(
                     errorType: 'payment_error',
                     errorMessage: error.toString(),
-                    context: {'screen': 'request_money', 'action': 'request_money'},
+                    context: {
+                      'screen': 'request_money',
+                      'action': 'request_money',
+                    },
                   );
                 }
               }

@@ -20,7 +20,7 @@ import 'controller/bank_accounts_controller.dart';
 import 'services/moov_service.dart';
 import 'services/platform_payment_service.dart';
 import 'services/subscription_service.dart';
-import 'services/video_settings_service.dart';
+
 import 'widgets/app_lifecycle_detector.dart';
 
 import 'utils/custom_color.dart';
@@ -70,7 +70,6 @@ void main() async {
 
         // Initialize services first
         Get.put(SubscriptionService());
-        Get.put(VideoSettingsService());
         
         // Initialize controllers
         Get.put(AuthController());

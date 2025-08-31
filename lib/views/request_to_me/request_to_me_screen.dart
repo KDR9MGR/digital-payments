@@ -59,10 +59,7 @@ class _RequestToMeScreenState extends State<RequestToMeScreen> {
             return Center(
               child: Text(
                 'No data available', // Update this message as needed
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.grey,
-                ),
+                style: TextStyle(fontSize: 18, color: Colors.grey),
               ),
             );
           }
@@ -130,17 +127,22 @@ class _RequestToMeScreenState extends State<RequestToMeScreen> {
                 Utils.showLoadingDialog(context);
                 try {
                   await _walletViewModel.cancelRequest(request);
-            // TODO: Add mounted check before using context in async function
-                  Navigator.of(context).pop();
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                  }
                 } catch (e) {
-            // TODO: Add mounted check before using context in async function
-                  Navigator.of(context).pop();
-                  
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+
                   // Use proper error handling instead of showing raw exception
                   await SubscriptionErrorHandler().handleSubscriptionError(
                     errorType: 'payment_error',
                     errorMessage: e.toString(),
-                    context: {'screen': 'request_to_me', 'action': 'cancel_request'},
+                    context: {
+                      'screen': 'request_to_me',
+                      'action': 'cancel_request',
+                    },
                   );
                 }
               }
@@ -166,13 +168,18 @@ class _RequestToMeScreenState extends State<RequestToMeScreen> {
                 );
                 await _walletViewModel.acceptRequest(request);
                 await _userProvider.fetchUserDetails();
-            // TODO: Add mounted check before using context in async function
-                Navigator.of(context).pop();
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                }
               } catch (e) {
-            // TODO: Add mounted check before using context in async function
-                Navigator.of(context).pop();
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                }
                 Utils.showDialogMessage(
-                    context, 'Error', 'Failed to accept request: $e');
+                  context,
+                  'Error',
+                  'Failed to accept request: $e',
+                );
               }
             }
           },
@@ -181,13 +188,18 @@ class _RequestToMeScreenState extends State<RequestToMeScreen> {
               Utils.showLoadingDialog(context);
               try {
                 await _walletViewModel.declineRequest(request);
-            // TODO: Add mounted check before using context in async function
-                Navigator.of(context).pop();
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                }
               } catch (e) {
-            // TODO: Add mounted check before using context in async function
-                Navigator.of(context).pop();
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                }
                 Utils.showDialogMessage(
-                    context, 'Error', 'Failed to decline request: $e');
+                  context,
+                  'Error',
+                  'Failed to decline request: $e',
+                );
               }
             }
           },
@@ -195,7 +207,10 @@ class _RequestToMeScreenState extends State<RequestToMeScreen> {
       }
     } catch (e) {
       Utils.showDialogMessage(
-          context, 'Error', 'Unexpected error occurred: $e');
+        context,
+        'Error',
+        'Unexpected error occurred: $e',
+      );
     }
   }
 }

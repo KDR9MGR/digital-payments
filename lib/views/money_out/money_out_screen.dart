@@ -122,9 +122,7 @@ class _MoneyOutScreenState extends State<MoneyOutScreen>
           if (!subscriptionController.hasActiveSubscription) {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: GoPremiumBanner(
-                showCloseButton: false,
-              ),
+              child: GoPremiumBanner(showCloseButton: false),
             );
           }
           return SizedBox.shrink();
@@ -514,7 +512,6 @@ class _MoneyOutScreenState extends State<MoneyOutScreen>
                 );
                 await _userProvider.fetchUserDetails();
                 if (context.mounted) {
-                  // TODO: Add mounted check before using context in async function
                   Navigator.pop(context);
                   Utils.showDialogMessage(
                     context,
@@ -525,9 +522,8 @@ class _MoneyOutScreenState extends State<MoneyOutScreen>
                   controller.agentUsernameOrEmailController.clear();
                 }
               } catch (e) {
-                // TODO: Add mounted check before using context in async function
                 Navigator.pop(context); // Dismiss loading dialog on error
-                
+
                 // Use proper error handling instead of showing raw exception
                 await SubscriptionErrorHandler().handleSubscriptionError(
                   errorType: 'payment_error',

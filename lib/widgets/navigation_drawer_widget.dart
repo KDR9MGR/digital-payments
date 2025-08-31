@@ -58,14 +58,6 @@ class NavigationDrawerWidget extends StatelessWidget {
   Column _drawerItems(BuildContext context, DashboardController controller) {
     return Column(
       children: [
-        // buildMenuItem(
-        //   context,
-        //   imagePath: Strings.withdrawMoneyImagePath,
-        //   title: Strings.withdrawMoney.tr,
-        //   onTap: () {
-        //     controller.navigateToWithdrawScreen();
-        //   },
-        // ),
         buildMenuItem(
           context,
           imagePath: Strings.requestToMeImagePath,
@@ -82,14 +74,7 @@ class NavigationDrawerWidget extends StatelessWidget {
             controller.navigateToTransactionHistoryScreen();
           },
         ),
-        // buildMenuItem(
-        //   context,
-        //   imagePath: Strings.withdrawHistoryImagePath,
-        //   title: Strings.withdrawHistory.tr,
-        //   onTap: () {
-        //     controller.navigateToWithdrawHistoryScreen();
-        //   },
-        // ),
+
         buildMenuItem(
           context,
           imagePath: Strings.myQRcodeImagePath,

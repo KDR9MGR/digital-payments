@@ -22,7 +22,7 @@ class WalletViewModel extends BaseViewModel {
   List<RequestMoneyModel> _requests = [];
 
   List<RequestMoneyModel> get requests => _requests;
-  
+
   // Firebase optimization services
   final FirebaseBatchService _batchService = FirebaseBatchService();
   final FirebaseQueryOptimizer _queryOptimizer = FirebaseQueryOptimizer();
@@ -46,7 +46,10 @@ class WalletViewModel extends BaseViewModel {
       notifyListeners();
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.init error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.init error: $e',
+          tag: 'WalletViewModel',
+        );
       }
       dataloadingState = DataloadingState.error;
       notifyListeners();
@@ -70,7 +73,10 @@ class WalletViewModel extends BaseViewModel {
         User? firebaseUser = FirebaseAuth.instance.currentUser;
         if (firebaseUser == null) {
           if (kDebugMode) {
-            AppLogger.warning('WalletViewModel.addMoney: No authenticated user found', tag: 'WalletViewModel');
+            AppLogger.warning(
+              'WalletViewModel.addMoney: No authenticated user found',
+              tag: 'WalletViewModel',
+            );
           }
           return;
         }
@@ -84,7 +90,10 @@ class WalletViewModel extends BaseViewModel {
           final data = userSnapshot.data() as Map<String, dynamic>?;
           if (data == null) {
             if (kDebugMode) {
-              AppLogger.warning('WalletViewModel.addMoney: User data is null', tag: 'WalletViewModel');
+              AppLogger.warning(
+                'WalletViewModel.addMoney: User data is null',
+                tag: 'WalletViewModel',
+              );
             }
             return;
           }
@@ -106,9 +115,15 @@ class WalletViewModel extends BaseViewModel {
             data: {'wallet_balances': user.walletBalances},
           );
 
+          // Generate transaction ID without calling Firestore
+          final transactionId =
+              DateTime.now().millisecondsSinceEpoch.toString() +
+              '_' +
+              user.userId.substring(0, 8) +
+              '_add';
+
           TransactionModel transaction = TransactionModel(
-            transactionId:
-                FirebaseFirestore.instance.collection('transactions').doc().id,
+            transactionId: transactionId,
             userId: user.userId,
             amount: amount,
             timestamp: DateTime.now(),
@@ -121,9 +136,9 @@ class WalletViewModel extends BaseViewModel {
             documentId: transaction.transactionId,
             data: transaction.toMap(),
           );
-          
+
           await _batchService.flushBatch();
-          
+
           // Invalidate user cache
           await _cacheService.invalidateUserCaches(user.userId);
         }
@@ -139,7 +154,10 @@ class WalletViewModel extends BaseViewModel {
         User? firebaseUser = FirebaseAuth.instance.currentUser;
         if (firebaseUser == null) {
           if (kDebugMode) {
-            AppLogger.warning('WalletViewModel.withdrawMoney: No authenticated user found', tag: 'WalletViewModel');
+            AppLogger.warning(
+              'WalletViewModel.withdrawMoney: No authenticated user found',
+              tag: 'WalletViewModel',
+            );
           }
           return;
         }
@@ -153,7 +171,10 @@ class WalletViewModel extends BaseViewModel {
           final data = userSnapshot.data() as Map<String, dynamic>?;
           if (data == null) {
             if (kDebugMode) {
-              AppLogger.warning('WalletViewModel.withdrawMoney: User data is null', tag: 'WalletViewModel');
+              AppLogger.warning(
+                'WalletViewModel.withdrawMoney: User data is null',
+                tag: 'WalletViewModel',
+              );
             }
             return;
           }
@@ -195,21 +216,27 @@ class WalletViewModel extends BaseViewModel {
               documentId: transaction.transactionId,
               data: transaction.toMap(),
             );
-            
+
             await _batchService.flushBatch();
-            
+
             // Invalidate user cache
             await _cacheService.invalidateUserCaches(user.userId);
           } else {
             if (kDebugMode) {
-              AppLogger.warning('WalletViewModel.withdrawMoney: Insufficient balance', tag: 'WalletViewModel');
+              AppLogger.warning(
+                'WalletViewModel.withdrawMoney: Insufficient balance',
+                tag: 'WalletViewModel',
+              );
             }
           }
         }
       }, operationName: 'Withdraw money from wallet');
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.withdrawMoney error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.withdrawMoney error: $e',
+          tag: 'WalletViewModel',
+        );
       }
     }
   }
@@ -231,29 +258,42 @@ class WalletViewModel extends BaseViewModel {
         }
 
         // Try to get cached balance first
-        final cachedBalance = _cacheService.getCachedWalletBalance(firebaseUser.uid, currency);
+        final cachedBalance = _cacheService.getCachedWalletBalance(
+          firebaseUser.uid,
+          currency,
+        );
         if (cachedBalance != null) {
-          AppLogger.log('Retrieved wallet balance from cache: $currency = $cachedBalance');
+          AppLogger.log(
+            'Retrieved wallet balance from cache: $currency = $cachedBalance',
+          );
           return cachedBalance;
         }
 
         // Use optimized query if cache miss
         final userData = await _queryOptimizer.getUserData(firebaseUser.uid);
         if (userData != null) {
-          final walletBalances = userData['wallet_balances'] as Map<String, dynamic>? ?? {};
+          final walletBalances =
+              userData['wallet_balances'] as Map<String, dynamic>? ?? {};
           final balance = (walletBalances[currency] ?? 0.0) as double;
-          
+
           // Cache the balance for future use
-          await _cacheService.cacheWalletBalance(firebaseUser.uid, currency, balance);
-          
+          await _cacheService.cacheWalletBalance(
+            firebaseUser.uid,
+            currency,
+            balance,
+          );
+
           return balance;
         }
-        
+
         return 0.0;
       }, operationName: 'Get current wallet balance');
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.getCurrentWalletBalance error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.getCurrentWalletBalance error: $e',
+          tag: 'WalletViewModel',
+        );
       }
     }
     return 0.0;
@@ -267,13 +307,16 @@ class WalletViewModel extends BaseViewModel {
     if (!_isValid) return;
 
     if (kDebugMode) {
-      AppLogger.info('WalletViewModel.sendMoneyToUser: recipientEmail: $recipientEmail', tag: 'WalletViewModel');
+      AppLogger.info(
+        'WalletViewModel.sendMoneyToUser: recipientEmail: $recipientEmail',
+        tag: 'WalletViewModel',
+      );
     }
 
     try {
       // Validate that P2P transactions use Moov integration
       await _validateMoovP2PIntegration();
-      
+
       await ThreadingUtils.runFirebaseOperation(() async {
         User? senderUser = FirebaseAuth.instance.currentUser;
         if (senderUser == null) {
@@ -289,7 +332,10 @@ class WalletViewModel extends BaseViewModel {
         final senderData = await _queryOptimizer.getUserData(senderUser.uid);
         if (senderData == null) {
           if (kDebugMode) {
-            AppLogger.warning('WalletViewModel.sendMoneyToUser: Sender data not found', tag: 'WalletViewModel');
+            AppLogger.warning(
+              'WalletViewModel.sendMoneyToUser: Sender data not found',
+              tag: 'WalletViewModel',
+            );
           }
           return;
         }
@@ -297,7 +343,10 @@ class WalletViewModel extends BaseViewModel {
         UserModel sender = UserModel.fromMap(senderData);
 
         // Search for recipient using optimized search
-        final recipientResults = await _queryOptimizer.searchUsers(recipientEmail, searchFields: ['email']);
+        final recipientResults = await _queryOptimizer.searchUsers(
+          recipientEmail,
+          searchFields: ['email'],
+        );
         if (recipientResults.isEmpty) {
           throw 'Recipient with email $recipientEmail not found';
         }
@@ -332,7 +381,7 @@ class WalletViewModel extends BaseViewModel {
           senderBalances: sender.walletBalances,
           recipientBalances: recipient.walletBalances,
         );
-        
+
         // Invalidate caches for both users
         await _cacheService.invalidateUserCaches(sender.userId);
         await _cacheService.invalidateUserCaches(recipient.userId);
@@ -344,13 +393,16 @@ class WalletViewModel extends BaseViewModel {
       });
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.sendMoneyToUser error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.sendMoneyToUser error: $e',
+          tag: 'WalletViewModel',
+        );
       }
       rethrow; // Rethrow the error to handle it in the calling function
     }
   }
 
-  Future<void> fetchTransactionHistory({int limit = 20}) async {
+  Future<void> fetchTransactionHistory({bool forceRefresh = false}) async {
     if (!_isValid) return;
 
     try {
@@ -366,32 +418,71 @@ class WalletViewModel extends BaseViewModel {
           return;
         }
 
+        // Check cache first if not forcing refresh
+        if (!forceRefresh) {
+          final cachedTransactions = await _cacheService.getCachedTransactions(
+            firebaseUser.uid,
+          );
+          if (cachedTransactions != null && cachedTransactions.isNotEmpty) {
+            _transactions =
+                cachedTransactions
+                    .map((data) {
+                      try {
+                        return TransactionModel.fromMap(data);
+                      } catch (e) {
+                        if (kDebugMode) {
+                          AppLogger.warning(
+                            'WalletViewModel.fetchTransactionHistory: Invalid cached transaction data: $e',
+                            tag: 'WalletViewModel',
+                          );
+                        }
+                        return null;
+                      }
+                    })
+                    .where((transaction) => transaction != null)
+                    .cast<TransactionModel>()
+                    .toList();
+            AppLogger.log(
+              'Loaded ${_transactions.length} transactions from cache',
+            );
+            return;
+          }
+        }
+
         // Use optimized query with caching
         final transactionData = await _queryOptimizer.getTransactionHistory(
           firebaseUser.uid,
-          limit: limit,
-          useCache: true,
+          limit: 50,
+          useCache: !forceRefresh,
         );
 
-        _transactions = transactionData
-            .map((data) {
-              try {
-                return TransactionModel.fromMap(data);
-              } catch (e) {
-                if (kDebugMode) {
-                  AppLogger.warning(
-                    'WalletViewModel.fetchTransactionHistory: Invalid transaction data: $e',
-                    tag: 'WalletViewModel',
-                  );
-                }
-                return null;
-              }
-            })
-            .where((transaction) => transaction != null)
-            .cast<TransactionModel>()
-            .toList();
-            
-        AppLogger.log('Fetched ${_transactions.length} transactions from optimized query');
+        _transactions =
+            transactionData
+                .map((data) {
+                  try {
+                    return TransactionModel.fromMap(data);
+                  } catch (e) {
+                    if (kDebugMode) {
+                      AppLogger.warning(
+                        'WalletViewModel.fetchTransactionHistory: Invalid transaction data: $e',
+                        tag: 'WalletViewModel',
+                      );
+                    }
+                    return null;
+                  }
+                })
+                .where((transaction) => transaction != null)
+                .cast<TransactionModel>()
+                .toList();
+
+        // Cache the fetched transactions
+        await _cacheService.cacheTransactions(
+          firebaseUser.uid,
+          transactionData,
+        );
+        AppLogger.log(
+          'Fetched and cached ${_transactions.length} transactions from optimized query',
+        );
       }, operationName: 'Fetch transaction history');
 
       // Notify listeners on main thread
@@ -400,7 +491,10 @@ class WalletViewModel extends BaseViewModel {
       });
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.fetchTransactionHistory error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.fetchTransactionHistory error: $e',
+          tag: 'WalletViewModel',
+        );
       }
     }
   }
@@ -454,11 +548,17 @@ class WalletViewModel extends BaseViewModel {
       }, operationName: 'Request money');
 
       if (kDebugMode) {
-        AppLogger.info('WalletViewModel.requestMoney: Money request sent successfully', tag: 'WalletViewModel');
+        AppLogger.info(
+          'WalletViewModel.requestMoney: Money request sent successfully',
+          tag: 'WalletViewModel',
+        );
       }
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.requestMoney error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.requestMoney error: $e',
+          tag: 'WalletViewModel',
+        );
       }
       rethrow; // Rethrow the error to handle it in the calling function
     }
@@ -478,25 +578,28 @@ class WalletViewModel extends BaseViewModel {
           forceRefresh: forceRefresh,
         );
 
-        _requests = requestData
-            .map((data) {
-              try {
-                return RequestMoneyModel.fromMap(data);
-              } catch (e) {
-                if (kDebugMode) {
-                  AppLogger.warning(
-                    'WalletViewModel.fetchRequests: Invalid request data: $e',
-                    tag: 'WalletViewModel',
-                  );
-                }
-                return null;
-              }
-            })
-            .where((request) => request != null)
-            .cast<RequestMoneyModel>()
-            .toList();
-            
-        AppLogger.log('Fetched ${_requests.length} requests from optimized query');
+        _requests =
+            requestData
+                .map((data) {
+                  try {
+                    return RequestMoneyModel.fromMap(data);
+                  } catch (e) {
+                    if (kDebugMode) {
+                      AppLogger.warning(
+                        'WalletViewModel.fetchRequests: Invalid request data: $e',
+                        tag: 'WalletViewModel',
+                      );
+                    }
+                    return null;
+                  }
+                })
+                .where((request) => request != null)
+                .cast<RequestMoneyModel>()
+                .toList();
+
+        AppLogger.log(
+          'Fetched ${_requests.length} requests from optimized query',
+        );
       }, operationName: 'Fetch requests');
 
       // Notify listeners on main thread
@@ -505,7 +608,10 @@ class WalletViewModel extends BaseViewModel {
       });
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.fetchRequests error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.fetchRequests error: $e',
+          tag: 'WalletViewModel',
+        );
       }
     }
   }
@@ -536,7 +642,10 @@ class WalletViewModel extends BaseViewModel {
       await fetchRequests(forceRefresh: true);
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.acceptRequest error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.acceptRequest error: $e',
+          tag: 'WalletViewModel',
+        );
       }
     }
   }
@@ -567,7 +676,10 @@ class WalletViewModel extends BaseViewModel {
       await fetchRequests(forceRefresh: true);
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.declineRequest error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.declineRequest error: $e',
+          tag: 'WalletViewModel',
+        );
       }
     }
   }
@@ -598,7 +710,10 @@ class WalletViewModel extends BaseViewModel {
       await fetchRequests(forceRefresh: true);
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.cancelRequest error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.cancelRequest error: $e',
+          tag: 'WalletViewModel',
+        );
       }
     }
   }
@@ -608,11 +723,16 @@ class WalletViewModel extends BaseViewModel {
     try {
       // Validate that we have proper Moov configuration
       // This ensures that all P2P transfers go through Moov's secure payment infrastructure
-      AppLogger.log('Validating Moov P2P integration...', tag: 'WalletViewModel');
-      
+      AppLogger.log(
+        'Validating Moov P2P integration...',
+        tag: 'WalletViewModel',
+      );
+
       // The validation passes - P2P transfers will now use Moov integration
-      AppLogger.log('Moov P2P integration validated successfully', tag: 'WalletViewModel');
-      
+      AppLogger.log(
+        'Moov P2P integration validated successfully',
+        tag: 'WalletViewModel',
+      );
     } catch (e) {
       AppLogger.error('P2P Moov validation failed: $e', tag: 'WalletViewModel');
       throw 'P2P transactions require Moov integration for security and compliance. Please ensure Moov service is properly configured.';
@@ -628,7 +748,10 @@ class WalletViewModel extends BaseViewModel {
     if (!_isValid) return;
 
     if (kDebugMode) {
-      AppLogger.info('WalletViewModel.sendMoneyToUserWithMoov: recipientEmail: $recipientEmail', tag: 'WalletViewModel');
+      AppLogger.info(
+        'WalletViewModel.sendMoneyToUserWithMoov: recipientEmail: $recipientEmail',
+        tag: 'WalletViewModel',
+      );
     }
 
     try {
@@ -704,36 +827,57 @@ class WalletViewModel extends BaseViewModel {
 
         // Record transaction in Firebase for tracking
         final transferId = transferResult?['transferId'];
-        
-        // Record transaction for sender
+
+        // Generate transaction IDs without calling Firestore
+        final senderTransactionId =
+            transferId ??
+            (DateTime.now().millisecondsSinceEpoch.toString() +
+                '_' +
+                sender.userId.substring(0, 8) +
+                '_send');
+        final recipientTransactionId =
+            DateTime.now().millisecondsSinceEpoch.toString() +
+            '_' +
+            recipient.userId.substring(0, 8) +
+            '_receive';
+
+        // Record transaction for sender using batch service
         TransactionModel senderTransaction = TransactionModel(
-          transactionId: transferId ?? FirebaseFirestore.instance.collection('transactions').doc().id,
+          transactionId: senderTransactionId,
           userId: sender.userId,
           amount: amount,
           timestamp: DateTime.now(),
           type: 'send_moov',
           currency: currency,
         );
-        await FirebaseFirestore.instance
-            .collection('transactions')
-            .doc(senderTransaction.transactionId)
-            .set(senderTransaction.toMap());
+        await _batchService.addWrite(
+          collection: 'transactions',
+          documentId: senderTransaction.transactionId,
+          data: senderTransaction.toMap(),
+        );
 
-        // Record transaction for recipient
+        // Record transaction for recipient using batch service
         TransactionModel recipientTransaction = TransactionModel(
-          transactionId: FirebaseFirestore.instance.collection('transactions').doc().id,
+          transactionId: recipientTransactionId,
           userId: recipient.userId,
           amount: amount,
           timestamp: DateTime.now(),
           type: 'receive_moov',
           currency: currency,
         );
-        await FirebaseFirestore.instance
-            .collection('transactions')
-            .doc(recipientTransaction.transactionId)
-            .set(recipientTransaction.toMap());
+        await _batchService.addWrite(
+          collection: 'transactions',
+          documentId: recipientTransaction.transactionId,
+          data: recipientTransaction.toMap(),
+        );
 
-        AppLogger.log('Moov P2P transfer completed successfully: $transferId', tag: 'WalletViewModel');
+        // Flush batch to commit all transactions
+        await _batchService.flushBatch();
+
+        AppLogger.log(
+          'Moov P2P transfer completed successfully: $transferId',
+          tag: 'WalletViewModel',
+        );
       }, operationName: 'Send money via Moov');
 
       // Notify listeners on main thread
@@ -742,7 +886,10 @@ class WalletViewModel extends BaseViewModel {
       });
     } catch (e) {
       if (kDebugMode) {
-        AppLogger.error('WalletViewModel.sendMoneyToUserWithMoov error: $e', tag: 'WalletViewModel');
+        AppLogger.error(
+          'WalletViewModel.sendMoneyToUserWithMoov error: $e',
+          tag: 'WalletViewModel',
+        );
       }
       rethrow;
     }

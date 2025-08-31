@@ -141,14 +141,16 @@ class LoginViewModel extends BaseViewModel {
       debugPrint('Firebase Auth is not initialized');
       return 'Firebase Auth is not initialized. Please restart the app.';
     }
-    
+
     debugPrint('Attempting to send password reset email to: $email');
-    
+
     try {
       await _auth!.sendPasswordResetEmail(email: email);
       debugPrint('Password reset email sent successfully to: $email');
     } on FirebaseAuthException catch (e) {
-      debugPrint('FirebaseAuthException during password reset: ${e.code} - ${e.message}');
+      debugPrint(
+        'FirebaseAuthException during password reset: ${e.code} - ${e.message}',
+      );
       if (e.code == 'user-not-found') {
         return 'No user found for that email address.';
       } else if (e.code == 'invalid-email') {
@@ -173,46 +175,6 @@ class LoginViewModel extends BaseViewModel {
     }
     return '';
   }
-
-  // Future<void> getUserData() async {
-  //   var firebaseUser = FirebaseAuth.instance.currentUser;
-  //   await Prefs.uid.set(firebaseUser?.uid ?? "uniqueId");
-  //   await _updateUserData(firebaseUser);
-  // }
-  //
-  // Future<void> _updateUserData(User? user) async {
-  //   final userService = UserService();
-  //   UserModel? userModel;
-  //   if (user != null) {
-  //     if (await userService.exists(user.uid)) {
-  //       userModel = await userService.readSingle(user.uid, forceFetch: true);
-  //     } else {
-  //       // creating a new user
-  //       final userModal = UserModel(
-  //         displayName: user.displayName ?? "displayName",
-  //         firstName: "",
-  //         lastName: "",
-  //         username: "username",
-  //         uid: user.uid,
-  //         email: user.email ?? "email",
-  //         isFTUComplete: false,
-  //         dpUrl: "",
-  //         gender: UserModel.genders[3],
-  //         isBrand: false,
-  //       );
-  //
-  //       userModel = await userService.createWithId(user.uid,
-  //           userModal); // creating user object with default data here, which will be updated later
-  //     }
-  //     if (userModel != null) {
-  //       await Prefs.isFTUComplete.set(userModel.isFTUComplete);
-  //       await Prefs.isLoginUserIsBrand.set(userModel.isBrand);
-  //       GlobalData().isLoginUserIsBrand = await Prefs.isLoginUserIsBrand.get();
-  //     }
-  //   } else {
-  //     throw Exception("Firebase instance of the User is null");
-  //   }
-  // }
 
   @override
   Future init() async {

@@ -19,6 +19,10 @@ import '../../widgets/auth_nav_bar.dart';
 import '../../widgets/inputs/country_picker_input_widget.dart';
 import '../../widgets/inputs/pin_and_password_input_widget.dart';
 import 'login_vm.dart';
+import '../../services/auth_service.dart';
+import '../../utils/storage_service.dart';
+import '../../utils/app_logger.dart';
+import '../../routes/routes.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -43,96 +47,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: SizedBox(
           width: MediaQuery.of(context).size.width,
           child: ListView(
-          children: [
-            Padding(
-              padding: EdgeInsets.only(
-                left: Dimensions.marginSize,
-                right: Dimensions.marginSize,
-                top: Dimensions.marginSize,
+            children: [
+              Padding(
+                padding: EdgeInsets.only(
+                  left: Dimensions.marginSize,
+                  right: Dimensions.marginSize,
+                  top: Dimensions.marginSize,
+                ),
+                child: Column(
+                  children: [
+                    _naveBarWidget(context, controller),
+                    _registerInfoWidget(context),
+                    SizedBox(height: Dimensions.heightSize),
+                  ],
+                ),
               ),
-              child: Column(
-                children: [
-                  _naveBarWidget(context, controller),
-                  _registerInfoWidget(context),
-                  SizedBox(height: Dimensions.heightSize),
-                ],
-              ),
-            ),
 
-            // Column(
-            //   children: [
-            //     SizedBox(
-            //       height: MediaQuery.of(context).size.height * 0.12,
-            //       width: MediaQuery.of(context).size.width,
-            //       child: TabBar(
-            //         controller: controller.tabController,
-            //         unselectedLabelColor: Colors.white.withValues(alpha: 0.5),
-            //         labelColor: Colors.white,
-            //         indicatorColor: Colors.transparent,
-            //         tabs: [
-            //           Container(
-            //             width: MediaQuery.of(context).size.width * 0.50,
-            //             // height: MediaQuery.of(context).size.height * 0.30,
-            //             padding:
-            //                 EdgeInsets.all(Dimensions.defaultPaddingSize * 0.5),
-            //             decoration: BoxDecoration(
-            //               borderRadius: BorderRadius.circular(Dimensions.radius),
-            //               color: CustomColor.secondaryColor,
-            //             ),
-            //             child: Tab(
-            //               icon: Icon(Icons.person),
-            //               text: Strings.personalAccount.tr,
-            //             ),
-            //           ),
-            //           Container(
-            //             width: MediaQuery.of(context).size.width * 0.50,
-            //             padding:
-            //                 EdgeInsets.all(Dimensions.defaultPaddingSize * 0.5),
-            //             decoration: BoxDecoration(
-            //               borderRadius: BorderRadius.circular(Dimensions.radius),
-            //               color: CustomColor.secondaryColor,
-            //             ),
-            //             child: Tab(
-            //               icon: Icon(Icons.business_center),
-            //               text: Strings.companyAccount.tr,
-            //             ),
-            //           ),
-            //         ],
-            //       ),
-            //     ),
-            //   ],
-            // ),
-            // tab views
-            _registerInputs(context, controller),
-            // Container(
-            //   padding: EdgeInsets.only(
-            //     left: Dimensions.marginSize * 0.6,
-            //     right: Dimensions.marginSize * 0.6,
-            //   ),
-            //   width: MediaQuery.of(context).size.width,
-            //   height: MediaQuery.of(context).size.height * 0.65,
-            //   child: TabBarView(
-            //     controller: controller.tabController,
-            //     children: [
-            //       ListView(
-            //         shrinkWrap: true,
-            //         physics: const BouncingScrollPhysics(),
-            //         children: [
-            //
-            //         ],
-            //       ),
-            //       ListView(
-            //         shrinkWrap: true,
-            //         physics: const BouncingScrollPhysics(),
-            //         children: [
-            //         //  _companyAccountInputs(context, controller),
-            //         ],
-            //       ),
-            //     ],
-            //   ),
-            // ),
-          ],
-        ),
+              _registerInputs(context, controller),
+            ],
+          ),
         ),
       ),
     );
@@ -172,6 +105,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         SizedBox(height: Dimensions.heightSize),
         _buttonWidget(context, controller, Strings.user),
+        SizedBox(height: Dimensions.heightSize),
+        _googleSignInButton(context),
       ],
     );
   }
@@ -432,6 +367,86 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _loginViewModel = Provider.of<LoginViewModel>(context, listen: false);
   }
 
+  // Google Sign-In Button
+  Widget _googleSignInButton(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 50,
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          try {
+            Utils.showLoadingDialog(context);
+
+            final authService = AuthService();
+            final result = await authService.signInWithGoogle();
+
+            if (result.isSuccess) {
+              // Handle successful Google sign in
+              AppLogger.log('Google sign in successful, saving login state...');
+
+              // Storage operations
+              final storageService = StorageService();
+              await storageService.saveValue(Strings.isLoggedIn, true);
+
+              if (mounted) {
+                Navigator.pop(context);
+                Get.offAllNamed(Routes.dashboardScreen);
+              }
+            } else {
+              // Handle Google sign in failure
+              if (mounted) {
+                Navigator.pop(context);
+                // Provide more user-friendly error messages for Google Sign In
+                String userMessage =
+                    result.errorMessage ?? 'Google Sign In failed';
+                if (userMessage.toLowerCase().contains('cancelled') ||
+                    userMessage.toLowerCase().contains('aborted')) {
+                  // Don't show error for user cancellation
+                  return;
+                } else if (userMessage.toLowerCase().contains('network')) {
+                  userMessage =
+                      'Network error. Please check your connection and try again.';
+                } else if (userMessage.toLowerCase().contains('unavailable')) {
+                  userMessage =
+                      'Google Sign In is temporarily unavailable. Please try again later.';
+                } else {
+                  userMessage =
+                      'Google Sign In failed. Please try again or use email registration.';
+                }
+                Utils.showDialogMessage(context, 'Sign In Failed', userMessage);
+              }
+            }
+          } catch (ex) {
+            AppLogger.log('Google sign in error: $ex');
+            if (mounted) {
+              Navigator.pop(context);
+              Utils.showDialogMessage(
+                context,
+                'Google Sign In Failed',
+                'Failed to sign in with Google. $ex',
+              );
+            }
+          }
+        },
+        icon: Icon(Icons.login, color: CustomColor.primaryColor),
+        label: Text(
+          'Sign up with Google',
+          style: TextStyle(
+            color: CustomColor.primaryColor,
+            fontSize: Dimensions.mediumTextSize,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: CustomColor.primaryColor, width: 1.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Dimensions.radius),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleSignUp(
     BuildContext context,
     UserModel user,
@@ -440,29 +455,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (controller.isChecked.value) {
       try {
         Utils.showLoadingDialog(context);
-        final errorMessage = await _loginViewModel?.signUp(user);
 
-        if (errorMessage != null && errorMessage.isNotEmpty) {
-          // TODO: Add mounted check before using context in async function
-          Navigator.pop(context);
-          Utils.showDialogMessage(context, 'Sign Up Failed', errorMessage);
+        final authService = AuthService();
+        final result = await authService.signUpWithEmailAndPassword(
+          email: user.emailAddress,
+          password: user.password,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          country: user.country,
+          mobile: user.mobile,
+          accountType: user.accountType,
+          companyName: user.companyName,
+          representativeFirstName: user.representativeFirstName,
+          representativeLastName: user.representativeLastName,
+        );
+
+        if (result.isSuccess) {
+          // Handle successful sign up
+          if (mounted) {
+            Navigator.pop(context);
+            Utils.showDialogMessage(
+              context,
+              'Registered',
+              'You are now registered successfully!',
+            );
+          }
+          // Navigate to login screen
+          controller.navigateToLoginScreen();
         } else {
-          // TODO: Add mounted check before using context in async function
+          // Handle sign up failure
+          if (mounted) {
+            Navigator.pop(context);
+            // Provide more user-friendly error messages for sign up
+            String userMessage = result.errorMessage ?? 'Sign up failed';
+            if (userMessage.toLowerCase().contains('email-already-in-use')) {
+              userMessage =
+                  'This email is already registered. Please use a different email or try signing in.';
+            } else if (userMessage.toLowerCase().contains('weak-password')) {
+              userMessage =
+                  'Password is too weak. Please choose a stronger password.';
+            } else if (userMessage.toLowerCase().contains('invalid-email')) {
+              userMessage = 'Please enter a valid email address.';
+            } else if (userMessage.toLowerCase().contains('network')) {
+              userMessage =
+                  'Network error. Please check your connection and try again.';
+            } else if (userMessage.toLowerCase().contains(
+              'too-many-requests',
+            )) {
+              userMessage =
+                  'Too many attempts. Please wait a moment and try again.';
+            } else {
+              userMessage =
+                  'Registration failed. Please check your information and try again.';
+            }
+            Utils.showDialogMessage(
+              context,
+              'Registration Failed',
+              userMessage,
+            );
+          }
+        }
+      } catch (ex) {
+        if (mounted) {
           Navigator.pop(context);
           Utils.showDialogMessage(
             context,
-            'Registered',
-            'You are now registered',
+            'Sign Up Failed',
+            'Failed to sign up. $ex',
           );
         }
-      } catch (ex) {
-        // TODO: Add mounted check before using context in async function
-        Navigator.pop(context);
-        Utils.showDialogMessage(
-          context,
-          'Sign Up Failed',
-          'Failed to sign up. $ex',
-        );
       }
     } else {
       Utils.showDialogMessage(

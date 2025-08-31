@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../services/video_player_service.dart';
-import '../services/video_settings_service.dart';
 
 class YouTubeVideoWidget extends StatefulWidget {
   final double height;
@@ -34,15 +32,10 @@ class _YouTubeVideoWidgetState extends State<YouTubeVideoWidget> {
     _controller = VideoPlayerService.initializeYouTubePlayer(widget.videoUrl);
     _controller.addListener(_listener);
     
-    // Listen to mute setting changes
-    final videoSettingsService = Get.find<VideoSettingsService>();
-    videoSettingsService.isVideoMutedStream.listen((isMuted) {
-      if (mounted && _controller.value.isReady) {
-        if (isMuted) {
-          _controller.mute();
-        } else {
-          _controller.unMute();
-        }
+    // Always ensure videos are muted - hardcoded behavior
+    _controller.addListener(() {
+      if (_controller.value.isReady) {
+        _controller.mute();
       }
     });
   }

@@ -10,6 +10,7 @@ import 'package:xpay/views/auth/wallet_view_model.dart';
 import 'package:xpay/widgets/details_transaction_widget.dart';
 import 'package:xpay/widgets/latest_transaction_widget.dart';
 import 'package:xpay/widgets/primary_appbar.dart';
+import 'package:xpay/widgets/subscription_guard.dart';
 
 class TransactionsHistory extends StatefulWidget {
   const TransactionsHistory({super.key});
@@ -48,57 +49,67 @@ class _TransactionsHistoryState extends State<TransactionsHistory> {
           ),
         ),
       ),
-      body:
-          Consumer<WalletViewModel>(builder: (context, walletViewModel, child) {
-        if (walletViewModel.transactions.isEmpty) {
-          return Center(
-              child: Text('No Transactions Found',
-                  style: CustomStyle.commonTextTitleWhite));
-        }
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const BouncingScrollPhysics(),
-          itemCount: walletViewModel.transactions.length,
-          itemBuilder: (context, index) {
-            TransactionModel transaction = walletViewModel.transactions[index];
-            return ExpansionTile(
-              trailing: SizedBox(),
-              title: TransactionsItemWidget(
-                imagePath: transaction.type == 'add'
-                    ? Strings.addMoneyImagePath
-                    : Strings.withdrawMoneyImagePath,
-                title: transaction.type == 'add'
-                    ? 'Added Money'
-                    : 'Withdrew Money',
-                dateAndTime:
-                    '${transaction.timestamp.hour}:${transaction.timestamp.minute} - ${transaction.timestamp.day}/${transaction.timestamp.month}/${transaction.timestamp.year}',
-                phoneNumber: '',
-                // If phone number is not available, you can remove this or use some placeholder
-                transactionId: transaction.transactionId,
-                amount: '${transaction.amount} ${transaction.currency}',
-                isMoneyOut: transaction.type == 'withdraw',
-              ),
-              children: [
-                DetailsTransactionWidget(
-                  transactionId: transaction.transactionId,
-                  wallet: transaction.currency,
-                  beforeCharge: '',
-                  // Add logic for beforeCharge if available
-                  charge: '',
-                  // Add logic for charge if available
-                  transactedAmount:
-                      '${transaction.amount} ${transaction.currency}',
-                  remainingBalance:
-                      '', // Add logic for remainingBalance if available
-                )
-              ],
+      body: SubscriptionGuard(
+        customMessage: 'Transaction history requires a premium subscription',
+        child: Consumer<WalletViewModel>(
+          builder: (context, walletViewModel, child) {
+            if (walletViewModel.transactions.isEmpty) {
+              return Center(
+                child: Text(
+                  'No Transactions Found',
+                  style: CustomStyle.commonTextTitleWhite,
+                ),
+              );
+            }
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const BouncingScrollPhysics(),
+              itemCount: walletViewModel.transactions.length,
+              itemBuilder: (context, index) {
+                TransactionModel transaction =
+                    walletViewModel.transactions[index];
+                return ExpansionTile(
+                  trailing: SizedBox(),
+                  title: TransactionsItemWidget(
+                    imagePath:
+                        transaction.type == 'add'
+                            ? Strings.addMoneyImagePath
+                            : Strings.withdrawMoneyImagePath,
+                    title:
+                        transaction.type == 'add'
+                            ? 'Added Money'
+                            : 'Withdrew Money',
+                    dateAndTime:
+                        '${transaction.timestamp.hour}:${transaction.timestamp.minute} - ${transaction.timestamp.day}/${transaction.timestamp.month}/${transaction.timestamp.year}',
+                    phoneNumber: '',
+                    // If phone number is not available, you can remove this or use some placeholder
+                    transactionId: transaction.transactionId,
+                    amount: '${transaction.amount} ${transaction.currency}',
+                    isMoneyOut: transaction.type == 'withdraw',
+                  ),
+                  children: [
+                    DetailsTransactionWidget(
+                      transactionId: transaction.transactionId,
+                      wallet: transaction.currency,
+                      beforeCharge: '',
+                      // Add logic for beforeCharge if available
+                      charge: '',
+                      // Add logic for charge if available
+                      transactedAmount:
+                          '${transaction.amount} ${transaction.currency}',
+                      remainingBalance:
+                          '', // Add logic for remainingBalance if available
+                    ),
+                  ],
+                );
+              },
+              separatorBuilder:
+                  (BuildContext context, int index) =>
+                      const Padding(padding: EdgeInsets.only(bottom: 0)),
             );
           },
-          separatorBuilder: (BuildContext context, int index) => const Padding(
-            padding: EdgeInsets.only(bottom: 0),
-          ),
-        );
-      }),
+        ),
+      ),
     );
   }
 

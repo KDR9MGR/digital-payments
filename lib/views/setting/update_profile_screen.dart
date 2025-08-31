@@ -240,20 +240,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
               ],
             ),
             SizedBox(width: Dimensions.widthSize),
-            Column(
-              children: [
-                SizedBox(height: Dimensions.heightSize),
-                // TextLabelWidget(text: Strings.country.tr),
-                // ProfileCountryCodePickerWidget(
-                //   hintText: 'Select Country',
-                //   controller: controller.countryController,
-                // ),
-                // Divider(
-                //   thickness: 1.5,
-                //   color: CustomColor.primaryColor.withValues(alpha: 0.5),
-                // ),
-              ],
-            ),
+            Column(children: [SizedBox(height: Dimensions.heightSize)]),
           ],
         ),
       ),

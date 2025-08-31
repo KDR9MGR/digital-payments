@@ -122,9 +122,7 @@ class _AddMoneyMoneyScreenState extends State<AddMoneyMoneyScreen>
           if (!subscriptionController.hasActiveSubscription) {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: GoPremiumBanner(
-                showCloseButton: false,
-              ),
+              child: GoPremiumBanner(showCloseButton: false),
             );
           }
           return SizedBox.shrink();
@@ -572,9 +570,7 @@ class _AddMoneyMoneyScreenState extends State<AddMoneyMoneyScreen>
                       if (value == null || value.isEmpty) {
                         return 'Please enter expiry date';
                       }
-                      if (!RegExp(
-                        r'^\d{2}/\d{2}$',
-                      ).hasMatch(value)) {
+                      if (!RegExp(r'^\d{2}/\d{2}$').hasMatch(value)) {
                         return 'Please enter a valid expiry date';
                       }
                       return null;
@@ -614,7 +610,6 @@ class _AddMoneyMoneyScreenState extends State<AddMoneyMoneyScreen>
           actions: [
             TextButton(
               onPressed: () {
-                // TODO: Add mounted check before using context in async function
                 Navigator.pop(context);
               },
               child: Text(
@@ -639,7 +634,6 @@ class _AddMoneyMoneyScreenState extends State<AddMoneyMoneyScreen>
                 ),
                 onPressed: () async {
                   if (formKey.currentState!.validate()) {
-                    // TODO: Add mounted check before using context in async function
                     Navigator.pop(context); // Close the dialog
                     Utils.showLoadingDialog(context);
                     try {
@@ -649,7 +643,6 @@ class _AddMoneyMoneyScreenState extends State<AddMoneyMoneyScreen>
                       );
                       await _userProvider.fetchUserDetails();
                       if (context.mounted) {
-                        // TODO: Add mounted check before using context in async function
                         Navigator.pop(context); // Close the loading dialog
                         Utils.showDialogMessage(
                           context,
@@ -659,7 +652,6 @@ class _AddMoneyMoneyScreenState extends State<AddMoneyMoneyScreen>
                         controller.amountController.clear();
                       }
                     } catch (error) {
-                      // TODO: Add mounted check before using context in async function
                       Navigator.pop(context); // Close the loading dialog
                       Utils.showDialogMessage(
                         context,

@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:xpay/utils/utils.dart';
 import 'package:xpay/views/auth/login_vm.dart';
+import '../../services/auth_service.dart';
 import 'package:xpay/widgets/buttons/primary_button.dart';
 import 'package:xpay/widgets/inputs/text_field_input_widget.dart';
 import 'package:xpay/widgets/inputs/text_label_widget.dart';
@@ -138,20 +139,16 @@ class ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
         if (formKey.currentState!.validate()) {
           try {
             Utils.showLoadingDialog(context);
-            final errorMessage = await _loginViewModel!.resetPassword(
+
+            final authService = AuthService();
+            final result = await authService.sendPasswordResetEmail(
               emailController.text.trim(),
             );
-            
+
             if (!mounted) return;
             Navigator.pop(context);
-            
-            if (errorMessage.isNotEmpty) {
-              Utils.showDialogMessage(
-                context,
-                'Password Reset Error',
-                errorMessage,
-              );
-            } else {
+
+            if (result.isSuccess) {
               Utils.showDialogMessage(
                 context,
                 'Password Reset Email Sent',
@@ -163,6 +160,12 @@ class ForgetPasswordScreenState extends State<ForgetPasswordScreen> {
                   Navigator.pop(context);
                 }
               });
+            } else {
+              Utils.showDialogMessage(
+                context,
+                'Password Reset Error',
+                result.errorMessage ?? 'Failed to send password reset email',
+              );
             }
           } catch (exception) {
             if (!mounted) return;

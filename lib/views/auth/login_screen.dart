@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../services/auth_service.dart';
+import '../../services/subscription_guard_service.dart';
 import 'package:xpay/controller/auth_controller.dart';
 import 'package:xpay/data/user_model.dart';
 import 'package:xpay/routes/routes.dart';
@@ -113,6 +115,8 @@ class _LoginScreenState extends State<LoginScreen> {
           _loginInputs(context, controller),
           SizedBox(height: Dimensions.heightSize * 2),
           _buttonWidget(context, controller),
+          SizedBox(height: Dimensions.heightSize),
+          _googleSignInButton(context),
         ],
       ),
     );
@@ -248,97 +252,173 @@ class _LoginScreenState extends State<LoginScreen> {
 
             AppLogger.log('Attempting sign in with: $email');
 
-            // Perform Firebase authentication directly on main thread
-            String errorMessage = '';
-            try {
-              final auth = FirebaseAuth.instance;
-              final result = await auth.signInWithEmailAndPassword(
-                email: email,
-                password: password,
-              );
+            final authService = AuthService();
+            final result = await authService.signInWithEmailAndPassword(
+              email,
+              password,
+            );
 
-              if (result.user == null) {
-                errorMessage = 'User is null';
-              }
-            } on FirebaseAuthException catch (e) {
-              if (e.code == 'email-already-in-use') {
-                errorMessage = 'The email address is already in use.';
-              } else if (e.code == 'user-disabled') {
-                errorMessage = 'The user account has been disabled.';
-              } else if (e.code == 'user-not-found') {
-                errorMessage = 'No user found for that email.';
-              } else if (e.code == 'wrong-password') {
-                errorMessage = 'Wrong password provided for that user.';
-              } else if (e.code == 'invalid-email') {
-                errorMessage = 'The email address is not formatted correctly.';
-              } else if (e.code == 'invalid-credential') {
-                errorMessage = 'The supplied auth credential is malformed or has expired. Please check your email and password.';
-              } else if (e.code == 'weak-password') {
-                errorMessage = 'The password provided is not strong enough.';
-              } else if (e.code == 'operation-not-allowed') {
-                errorMessage = 'This sign-in method is not enabled.';
-              } else if (e.code == 'too-many-requests') {
-                errorMessage = 'Too many requests. Please try again later.';
-              } else {
-                errorMessage = 'Error signing in: ${e.message}';
-              }
-            } catch (e) {
-              errorMessage = 'Error signing in: $e';
-            }
-
-            if (errorMessage.isNotEmpty) {
-              // Handle sign in failure
-              // TODO: Add mounted check before using context in async function
-              Navigator.pop(context);
-              Utils.showDialogMessage(context, 'Sign In Failed', errorMessage);
-            } else {
-              // Handle successful sign in - all on main thread
+            if (result.isSuccess) {
+              // Handle successful sign in
               AppLogger.log('Sign in successful, saving login state...');
 
-              // Storage operations on main thread
+              // Storage operations
               final storageService = StorageService();
               await storageService.saveValue(Strings.isLoggedIn, true);
 
-              // Fetch user details directly on main thread without isolates
-              try {
-                User? user = FirebaseAuth.instance.currentUser;
-                if (user != null) {
-                  QuerySnapshot querySnapshot =
-                      await FirebaseFirestore.instance
-                          .collection('users')
-                          .where('userId', isEqualTo: user.uid)
-                          .get();
-
-                  if (querySnapshot.docs.isNotEmpty) {
-                    final userModel = UserModel.fromMap(
-                      querySnapshot.docs.first.data() as Map<String, dynamic>,
-                    );
-                    _userProvider.updateUserDirectly(userModel);
-                  }
-                }
-              } catch (e) {
-                AppLogger.log('Error fetching user details: $e');
-                // Continue anyway - user can see dashboard
+              // Fetch and store user data
+              final userData = await authService.getCurrentUserData();
+              if (userData != null) {
+                _userProvider.updateUserDirectly(userData);
               }
 
-              // TODO: Add mounted check before using context in async function
-              Navigator.pop(context);
-              Get.offAllNamed(Routes.dashboardScreen);
+              if (mounted) {
+                Navigator.pop(context);
+                Get.offAllNamed(Routes.dashboardScreen);
+              }
+            } else {
+              // Handle sign in failure
+              if (mounted) {
+                Navigator.pop(context);
+                // Provide more user-friendly error messages for sign in
+                String userMessage = result.errorMessage ?? 'Sign in failed';
+                if (userMessage.toLowerCase().contains('user-not-found')) {
+                  userMessage =
+                      'No account found with this email. Please check your email or sign up.';
+                } else if (userMessage.toLowerCase().contains(
+                  'wrong-password',
+                )) {
+                  userMessage =
+                      'Incorrect password. Please try again or reset your password.';
+                } else if (userMessage.toLowerCase().contains(
+                  'invalid-email',
+                )) {
+                  userMessage = 'Please enter a valid email address.';
+                } else if (userMessage.toLowerCase().contains(
+                  'user-disabled',
+                )) {
+                  userMessage =
+                      'This account has been disabled. Please contact support.';
+                } else if (userMessage.toLowerCase().contains('network')) {
+                  userMessage =
+                      'Network error. Please check your connection and try again.';
+                } else if (userMessage.toLowerCase().contains(
+                  'too-many-requests',
+                )) {
+                  userMessage =
+                      'Too many failed attempts. Please wait a moment and try again.';
+                } else {
+                  userMessage =
+                      'Sign in failed. Please check your credentials and try again.';
+                }
+                Utils.showDialogMessage(context, 'Sign In Failed', userMessage);
+              }
             }
           } catch (ex) {
             AppLogger.log('Login error: $ex');
-            // TODO: Add mounted check before using context in async function
-            Navigator.pop(context);
-            Utils.showDialogMessage(
-              context,
-              'Sign In Failed',
-              'Failed to sign in. $ex',
-            );
+            if (mounted) {
+              Navigator.pop(context);
+              Utils.showDialogMessage(
+                context,
+                'Sign In Failed',
+                'Failed to sign in. $ex',
+              );
+            }
           }
         }
       },
       borderColorName: CustomColor.primaryColor,
       borderWidth: 0,
+    );
+  }
+
+  // Google Sign-In Button
+  Widget _googleSignInButton(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 50,
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          try {
+            Utils.showLoadingDialog(context);
+
+            final authService = AuthService();
+            final result = await authService.signInWithGoogle();
+
+            if (result.isSuccess) {
+              // Handle successful Google sign in
+              AppLogger.log('Google sign in successful, saving login state...');
+
+              // Storage operations
+              final storageService = StorageService();
+              await storageService.saveValue(Strings.isLoggedIn, true);
+
+              // Fetch and store user data
+              final userData = await authService.getCurrentUserData();
+              if (userData != null) {
+                _userProvider.updateUserDirectly(userData);
+              }
+
+              if (mounted) {
+                Navigator.pop(context);
+                Get.offAllNamed(Routes.dashboardScreen);
+              }
+            } else {
+              // Handle Google sign in failure
+              if (mounted) {
+                Navigator.pop(context);
+                // Provide more user-friendly error messages for Google Sign In
+                String userMessage =
+                    result.errorMessage ?? 'Google Sign In failed';
+                if (userMessage.toLowerCase().contains('cancelled') ||
+                    userMessage.toLowerCase().contains('aborted')) {
+                  // Don't show error for user cancellation
+                  return;
+                } else if (userMessage.toLowerCase().contains('network')) {
+                  userMessage =
+                      'Network error. Please check your connection and try again.';
+                } else if (userMessage.toLowerCase().contains('unavailable')) {
+                  userMessage =
+                      'Google Sign In is temporarily unavailable. Please try again later.';
+                } else {
+                  userMessage =
+                      'Google Sign In failed. Please try again or use email sign in.';
+                }
+                Utils.showDialogMessage(
+                  context,
+                  'Google Sign In Failed',
+                  userMessage,
+                );
+              }
+            }
+          } catch (ex) {
+            AppLogger.log('Google sign in error: $ex');
+            if (mounted) {
+              Navigator.pop(context);
+              Utils.showDialogMessage(
+                context,
+                'Google Sign In Failed',
+                'Failed to sign in with Google. $ex',
+              );
+            }
+          }
+        },
+        icon: Icon(Icons.login, color: CustomColor.primaryColor),
+        label: Text(
+          'Sign in with Google',
+          style: TextStyle(
+            color: CustomColor.primaryColor,
+            fontSize: Dimensions.mediumTextSize,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: CustomColor.primaryColor, width: 1.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Dimensions.radius),
+          ),
+        ),
+      ),
     );
   }
 

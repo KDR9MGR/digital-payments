@@ -20,30 +20,34 @@ import 'package:url_launcher/url_launcher.dart';
 
 class SubscriptionController extends GetxController {
   final MoovService _moovService = MoovService();
-  final SubscriptionService _subscriptionService = Get.find<SubscriptionService>();
+  final SubscriptionService _subscriptionService =
+      Get.find<SubscriptionService>();
   final FirebaseBatchService _batchService = FirebaseBatchService();
   final FirebaseQueryOptimizer _queryOptimizer = FirebaseQueryOptimizer();
   final FirebaseCacheService _cacheService = FirebaseCacheService();
-  
+
   // Observable variables
   final RxBool _isLoading = false.obs;
   final RxBool _hasActiveSubscription = false.obs;
   final RxString _currentPlan = ''.obs;
   final RxString _subscriptionStatus = ''.obs;
-  final RxList<Map<String, dynamic>> _subscriptions = <Map<String, dynamic>>[].obs;
-  final RxList<Map<String, dynamic>> _paymentMethods = <Map<String, dynamic>>[].obs;
+  final RxList<Map<String, dynamic>> _subscriptions =
+      <Map<String, dynamic>>[].obs;
+  final RxList<Map<String, dynamic>> _paymentMethods =
+      <Map<String, dynamic>>[].obs;
   final RxString _customerId = ''.obs;
   final RxString _moovAccountId = ''.obs;
-  final RxBool _useMoovPayments = true.obs; // Switch to use Moov instead of Stripe
+  final RxBool _useMoovPayments =
+      true.obs; // Switch to use Moov instead of Stripe
   final RxBool _googlePayAvailable = false.obs;
   final RxBool _applePayAvailable = false.obs;
-  
+
   // Timer for periodic subscription status checking
   Timer? _statusCheckTimer;
-  
+
   // Stream subscription for real-time updates
   StreamSubscription<bool>? _subscriptionStatusSubscription;
-  
+
   // Session management variables
   final RxBool _hasActivePendingSession = false.obs;
   final RxString _pendingSessionId = ''.obs;
@@ -65,32 +69,35 @@ class SubscriptionController extends GetxController {
 
   // Get the single plan
   String get singlePlanId => 'super_payments';
-  Map<String, dynamic>? get singlePlan => MoovConfig.subscriptionPlans['super_payments'];
+  Map<String, dynamic>? get singlePlan =>
+      MoovConfig.subscriptionPlans['super_payments'];
 
   @override
   void onInit() {
     super.onInit();
     // Check platform payment availability immediately (this doesn't require network)
     _checkPlatformPaymentAvailability();
-    
+
     // Delay other initialization to ensure user authentication is ready
     Future.delayed(Duration(milliseconds: 500), () {
       _initializeSubscriptionData();
     });
-    
+
     // Start periodic subscription status checking
     _startPeriodicStatusCheck();
-    
+
     // Check for incomplete session on init
     _checkForIncompleteSession();
-    
+
     // Listen to subscription service stream for real-time updates
-    _subscriptionStatusSubscription = _subscriptionService.subscriptionStatusStream.listen((hasSubscription) {
-      _hasActiveSubscription.value = hasSubscription;
-      _subscriptionStatus.value = hasSubscription ? 'active' : 'inactive';
-    });
+    _subscriptionStatusSubscription = _subscriptionService
+        .subscriptionStatusStream
+        .listen((hasSubscription) {
+          _hasActiveSubscription.value = hasSubscription;
+          _subscriptionStatus.value = hasSubscription ? 'active' : 'inactive';
+        });
   }
-  
+
   @override
   void onClose() {
     _statusCheckTimer?.cancel();
@@ -104,38 +111,49 @@ class SubscriptionController extends GetxController {
     _isLoading.value = true;
     try {
       AppLogger.log('Initializing subscription data...');
-      
+
       // Only try to load account IDs if user is authenticated
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
+        // Check cache first for subscription status
+        final cachedStatus = await _cacheService.getCachedSubscriptionStatus(
+          user.uid,
+        );
+        if (cachedStatus != null) {
+          _updateSubscriptionFromCache(cachedStatus);
+          AppLogger.log('Loaded subscription status from cache');
+        }
+
         if (useMoovPayments) {
           await _loadMoovAccountId();
         } else {
           await _loadCustomerId();
         }
-        
+
         // These methods should not fail the entire initialization
         try {
           await _checkSubscriptionStatus();
         } catch (e) {
           AppLogger.log('Warning: Could not check subscription status: $e');
         }
-        
+
         try {
           await _loadSubscriptions();
         } catch (e) {
           AppLogger.log('Warning: Could not load subscriptions: $e');
         }
-        
+
         try {
           await _loadPaymentMethods();
         } catch (e) {
           AppLogger.log('Warning: Could not load payment methods: $e');
         }
       } else {
-        AppLogger.log('User not authenticated, skipping account initialization');
+        AppLogger.log(
+          'User not authenticated, skipping account initialization',
+        );
       }
-      
+
       AppLogger.log('Subscription data initialization completed');
     } catch (e) {
       AppLogger.log('Error during subscription initialization: $e');
@@ -145,11 +163,23 @@ class SubscriptionController extends GetxController {
     }
   }
 
+  void _updateSubscriptionFromCache(Map<String, dynamic> cachedStatus) {
+    _hasActiveSubscription.value =
+        cachedStatus['hasActiveSubscription'] ?? false;
+    _currentPlan.value = cachedStatus['currentPlan'] ?? '';
+    _subscriptionStatus.value =
+        cachedStatus['subscriptionStatus'] ?? 'inactive';
+    _customerId.value = cachedStatus['customerId'] ?? '';
+    _moovAccountId.value = cachedStatus['moovAccountId'] ?? '';
+  }
+
   // Check platform payment availability
   Future<void> _checkPlatformPaymentAvailability() async {
     try {
-      _googlePayAvailable.value = await PlatformPaymentService.isGooglePayAvailable();
-      _applePayAvailable.value = await PlatformPaymentService.isApplePayAvailable();
+      _googlePayAvailable.value =
+          await PlatformPaymentService.isGooglePayAvailable();
+      _applePayAvailable.value =
+          await PlatformPaymentService.isApplePayAvailable();
     } catch (e) {
       AppLogger.log('Error checking platform payment availability: $e');
     }
@@ -166,10 +196,12 @@ class SubscriptionController extends GetxController {
 
       // Use optimized query service to get user data
       final userData = await _queryOptimizer.getUserData(user.uid);
-      
+
       if (userData != null && userData['moovAccountId'] != null) {
         _moovAccountId.value = userData['moovAccountId'];
-        AppLogger.log('Loaded existing Moov account ID: ${_moovAccountId.value}');
+        AppLogger.log(
+          'Loaded existing Moov account ID: ${_moovAccountId.value}',
+        );
       } else {
         // Try to create new Moov account, but don't fail if it doesn't work
         try {
@@ -191,7 +223,7 @@ class SubscriptionController extends GetxController {
     String email = user.email ?? 'user@example.com';
     String firstName = 'User';
     String lastName = '';
-    
+
     // Try to get existing user data from optimized query
     final userData = await _queryOptimizer.getUserData(user.uid);
     if (userData != null) {
@@ -210,7 +242,7 @@ class SubscriptionController extends GetxController {
     }
 
     AppLogger.log('Creating Moov account for user: $email');
-    
+
     // Create new Moov account
     final accountResult = await _moovService.createAccount(
       email: email,
@@ -219,11 +251,11 @@ class SubscriptionController extends GetxController {
       phone: user.phoneNumber,
       userId: user.uid,
     );
-    
+
     if (accountResult != null && accountResult['success'] == true) {
       _moovAccountId.value = accountResult['accountId'];
       AppLogger.log('Created Moov account: ${_moovAccountId.value}');
-      
+
       // Use batch service for optimized writes
       final userData = await _queryOptimizer.getUserData(user.uid);
       if (userData != null) {
@@ -248,11 +280,13 @@ class SubscriptionController extends GetxController {
         );
       }
       await _batchService.flushBatch();
-      
+
       // Invalidate cache to ensure fresh data
       await _cacheService.invalidateUserCaches(user.uid);
     } else {
-      throw Exception('Failed to create Moov account: ${accountResult?['error'] ?? 'Unknown error'}');
+      throw Exception(
+        'Failed to create Moov account: ${accountResult?['error'] ?? 'Unknown error'}',
+      );
     }
   }
 
@@ -270,12 +304,12 @@ class SubscriptionController extends GetxController {
 
       // Set customer ID to user ID for Moov payments
       _customerId.value = user.uid;
-      
+
       // Ensure user document exists
       if (userData == null) {
         String email = user.email ?? 'user@example.com';
         String name = user.displayName ?? 'User';
-        
+
         await _batchService.addWrite(
           collection: 'users',
           documentId: user.uid,
@@ -283,18 +317,24 @@ class SubscriptionController extends GetxController {
             'userId': user.uid,
             'email': email,
             'firstName': name.split(' ').first,
-            'lastName': name.split(' ').length > 1 ? name.split(' ').sublist(1).join(' ') : '',
+            'lastName':
+                name.split(' ').length > 1
+                    ? name.split(' ').sublist(1).join(' ')
+                    : '',
             'createdAt': FieldValue.serverTimestamp(),
           },
         );
         await _batchService.flushBatch();
-        
+
         // Invalidate cache to ensure fresh data
         await _cacheService.invalidateUserCaches(user.uid);
       }
     } catch (e) {
       AppLogger.log('Error loading customer ID: $e');
-      Get.snackbar('Error', 'Failed to initialize payment system. Please try again.');
+      Get.snackbar(
+        'Error',
+        'Failed to initialize payment system. Please try again.',
+      );
     }
   }
 
@@ -302,7 +342,7 @@ class SubscriptionController extends GetxController {
   Future<void> _checkSubscriptionStatus() async {
     try {
       AppLogger.log('SubscriptionController: Checking subscription status...');
-      
+
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         _hasActiveSubscription.value = false;
@@ -311,33 +351,47 @@ class SubscriptionController extends GetxController {
       }
 
       // Always check with subscription service first for the most accurate status
-      final serviceHasSubscription = await _subscriptionService.isUserSubscribed(forceRefresh: true);
-      
+      final serviceHasSubscription = await _subscriptionService
+          .isUserSubscribed(forceRefresh: true);
+
       // Use optimized query service for subscription status validation
-      final subscriptionData = await _queryOptimizer.getSubscriptionStatus(user.uid);
-      
+      final subscriptionData = await _queryOptimizer.getSubscriptionStatus(
+        user.uid,
+      );
+
       // Prioritize service status as it includes platform validation
       final isValid = serviceHasSubscription || (subscriptionData != null);
       _hasActiveSubscription.value = isValid;
       _subscriptionStatus.value = isValid ? 'active' : 'inactive';
-      
+
       if (isValid) {
         _currentPlan.value = subscriptionData?['planId'] ?? singlePlanId;
-        AppLogger.log('SubscriptionController: User has active subscription (Service: $serviceHasSubscription, Firebase: ${subscriptionData != null})');
+        AppLogger.log(
+          'SubscriptionController: User has active subscription (Service: $serviceHasSubscription, Firebase: ${subscriptionData != null})',
+        );
       } else {
         _currentPlan.value = '';
-        AppLogger.log('SubscriptionController: User does not have active subscription');
+        AppLogger.log(
+          'SubscriptionController: User does not have active subscription',
+        );
       }
     } catch (e) {
-      AppLogger.error('SubscriptionController: Error checking subscription status', error: e);
+      AppLogger.error(
+        'SubscriptionController: Error checking subscription status',
+        error: e,
+      );
       // Fallback to subscription service status on error
       try {
         final fallbackStatus = await _subscriptionService.isUserSubscribed();
         _hasActiveSubscription.value = fallbackStatus;
         _subscriptionStatus.value = fallbackStatus ? 'active' : 'inactive';
-        AppLogger.log('SubscriptionController: Using fallback status: $fallbackStatus');
+        AppLogger.log(
+          'SubscriptionController: Using fallback status: $fallbackStatus',
+        );
       } catch (fallbackError) {
-        AppLogger.log('SubscriptionController: Fallback also failed: $fallbackError');
+        AppLogger.log(
+          'SubscriptionController: Fallback also failed: $fallbackError',
+        );
         // Keep current status if both fail
       }
     }
@@ -384,7 +438,8 @@ class SubscriptionController extends GetxController {
       }
 
       // Generate subscription ID
-      final subscriptionId = 'sub_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}';
+      final subscriptionId =
+          'sub_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}';
 
       // Show platform payment sheet
       final paymentResult = await PlatformPaymentService.showPaymentSheet(
@@ -412,17 +467,19 @@ class SubscriptionController extends GetxController {
 
         // Force refresh subscription status in service first
         await _subscriptionService.isUserSubscribed(forceRefresh: true);
-        
+
         // Then refresh controller data
         await _initializeSubscriptionData();
-        
+
         // Update local status immediately
         _hasActiveSubscription.value = true;
         _subscriptionStatus.value = 'active';
         _currentPlan.value = singlePlanId;
-        
-        AppLogger.log('SubscriptionController: Subscription activated successfully');
-        
+
+        AppLogger.log(
+          'SubscriptionController: Subscription activated successfully',
+        );
+
         Get.back(); // Go back to previous screen
         Get.snackbar('Success', 'Welcome to Super Payments! 🎉');
         return true;
@@ -431,7 +488,7 @@ class SubscriptionController extends GetxController {
       return false;
     } catch (e) {
       AppLogger.log('Error subscribing with Moov: $e');
-      
+
       // Use proper error handling instead of showing raw exception
       await SubscriptionErrorHandler().handleSubscriptionError(
         errorType: 'payment_error',
@@ -444,9 +501,10 @@ class SubscriptionController extends GetxController {
     }
   }
 
-
   // Store subscription data in Firestore using batch service
-  Future<void> _storeSubscriptionData(Map<String, dynamic> subscriptionData) async {
+  Future<void> _storeSubscriptionData(
+    Map<String, dynamic> subscriptionData,
+  ) async {
     try {
       await _batchService.addWrite(
         collection: 'subscriptions',
@@ -454,11 +512,20 @@ class SubscriptionController extends GetxController {
         data: subscriptionData,
       );
       await _batchService.flushBatch();
-      
-      // Invalidate subscription cache
+
+      // Cache the updated subscription status
       final userId = subscriptionData['userId'];
       if (userId != null) {
-        await _cacheService.invalidateCache('subscription_$userId');
+        final cacheData = {
+          'hasActiveSubscription': subscriptionData['status'] == 'active',
+          'currentPlan': subscriptionData['planId'] ?? '',
+          'subscriptionStatus': subscriptionData['status'] ?? 'inactive',
+          'customerId': _customerId.value,
+          'moovAccountId': _moovAccountId.value,
+          'lastUpdated': DateTime.now().toIso8601String(),
+        };
+        await _cacheService.cacheSubscriptionStatus(userId, cacheData);
+        AppLogger.log('Cached subscription status after storing data');
       }
     } catch (e) {
       AppLogger.log('Error storing subscription data: $e');
@@ -472,13 +539,13 @@ class SubscriptionController extends GetxController {
       // Implement subscription cancellation logic
       // This would typically call your backend API
       AppLogger.log('Cancelling subscription: $subscriptionId');
-      
+
       // For now, simulate cancellation
       await Future.delayed(Duration(milliseconds: 500));
-      
+
       await _initializeSubscriptionData(); // Refresh data
       Get.snackbar('Success', 'Subscription cancelled successfully');
-      
+
       return true;
     } catch (e) {
       AppLogger.log('Error cancelling subscription: $e');
@@ -500,12 +567,12 @@ class SubscriptionController extends GetxController {
       // Implement payment method addition logic
       // This would typically integrate with your payment processor
       AppLogger.log('Adding payment method for customer: ${_customerId.value}');
-      
+
       // For now, simulate payment method addition
       await Future.delayed(Duration(milliseconds: 500));
-      
+
       Get.snackbar('Info', 'Payment method setup initiated');
-      
+
       await _loadPaymentMethods(); // Refresh payment methods
       return true;
     } catch (e) {
@@ -572,7 +639,9 @@ class SubscriptionController extends GetxController {
   }
 
   // Store pending payment session
-  Future<void> _storePendingPaymentSession(Map<String, dynamic> sessionData) async {
+  Future<void> _storePendingPaymentSession(
+    Map<String, dynamic> sessionData,
+  ) async {
     try {
       await _batchService.addWrite(
         collection: 'payment_sessions',
@@ -588,19 +657,20 @@ class SubscriptionController extends GetxController {
   // Redirect to Google Play Store
   Future<void> _redirectToGooglePlayStore() async {
     try {
-      const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.yourapp.package';
+      const playStoreUrl =
+          'https://play.google.com/store/apps/details?id=com.yourapp.package';
       final uri = Uri.parse(playStoreUrl);
-      
+
       // Record the time when redirecting to Play Store
       _playStoreRedirectTime = DateTime.now();
       _hasActivePendingSession.value = true;
-      
+
       // Start session timeout timer (5 minutes)
       _startSessionTimeoutTimer();
-      
+
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-        
+
         // Start checking for app resume after a delay
         _startAppResumeDetection();
       } else {
@@ -613,7 +683,7 @@ class SubscriptionController extends GetxController {
       rethrow;
     }
   }
-  
+
   // Start periodic subscription status checking
   void _startPeriodicStatusCheck() {
     // Check subscription status every 30 seconds when app is active
@@ -621,23 +691,23 @@ class SubscriptionController extends GetxController {
       _checkSubscriptionStatus();
     });
   }
-  
+
   // Validate payment status after returning from Play Store
   Future<void> validatePaymentStatus() async {
     try {
       AppLogger.log('Validating payment status after Play Store redirect');
-      
+
       // Force refresh subscription status
       await _checkSubscriptionStatus();
-      
+
       // If user now has active subscription, show success message
       if (_hasActiveSubscription.value) {
         Get.snackbar(
-          'Success', 
+          'Success',
           'Welcome to Super Payments! Your subscription is now active. 🎉',
           duration: Duration(seconds: 5),
         );
-        
+
         // Refresh all subscription data
         await _initializeSubscriptionData();
       }
@@ -657,7 +727,7 @@ class SubscriptionController extends GetxController {
     try {
       // Start payment session with timeout
       PaymentValidationService.startPaymentSession();
-      
+
       final plan = singlePlan;
       if (plan == null) {
         Get.snackbar('Error', 'Subscription plan not found');
@@ -666,47 +736,56 @@ class SubscriptionController extends GetxController {
       }
 
       // Generate subscription ID
-      final subscriptionId = 'sub_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}';
-      final transactionId = 'txn_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}';
+      final subscriptionId =
+          'sub_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}';
+      final transactionId =
+          'txn_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}';
 
       // Validate subscription purchase
-      final subscriptionValidation = await PaymentValidationService.validateSubscriptionPurchase(
-        subscriptionId: subscriptionId,
-        planId: singlePlanId,
-        amount: plan['price'].toDouble(),
-        paymentMethod: 'apple_pay',
-      );
-      
+      final subscriptionValidation =
+          await PaymentValidationService.validateSubscriptionPurchase(
+            subscriptionId: subscriptionId,
+            planId: singlePlanId,
+            amount: plan['price'].toDouble(),
+            paymentMethod: 'apple_pay',
+          );
+
       if (!subscriptionValidation['success']) {
         // Log validation error silently without showing user prompt
-        AppLogger.log('Subscription validation failed: ${subscriptionValidation['error']}');
+        AppLogger.log(
+          'Subscription validation failed: ${subscriptionValidation['error']}',
+        );
         PaymentValidationService.endPaymentSession();
         return;
       }
 
       // Process Apple Pay payment
-      final paymentResult = await PlatformPaymentService.processApplePaySubscription(
-        amount: plan['price'].toDouble(),
-        currency: plan['currency'],
-        subscriptionId: subscriptionId,
-      );
+      final paymentResult =
+          await PlatformPaymentService.processApplePaySubscription(
+            amount: plan['price'].toDouble(),
+            currency: plan['currency'],
+            subscriptionId: subscriptionId,
+          );
 
       if (paymentResult != null && paymentResult['success'] == true) {
         // Validate Apple Pay payment
-        final paymentValidation = await PaymentValidationService.validateApplePayPayment(
-          transactionId: transactionId,
-          amount: plan['price'].toDouble(),
-          currency: plan['currency'],
-          subscriptionId: subscriptionId,
-        );
-        
+        final paymentValidation =
+            await PaymentValidationService.validateApplePayPayment(
+              transactionId: transactionId,
+              amount: plan['price'].toDouble(),
+              currency: plan['currency'],
+              subscriptionId: subscriptionId,
+            );
+
         if (!paymentValidation['success']) {
           // Log payment validation error silently without showing user prompt
-          AppLogger.log('Payment validation failed: ${paymentValidation['error']}');
+          AppLogger.log(
+            'Payment validation failed: ${paymentValidation['error']}',
+          );
           PaymentValidationService.endPaymentSession();
           return;
         }
-        
+
         // Store subscription in Firestore
         await _storeSubscriptionData({
           'subscriptionId': subscriptionId,
@@ -727,17 +806,19 @@ class SubscriptionController extends GetxController {
 
         // Force refresh subscription status in service first
         await _subscriptionService.isUserSubscribed(forceRefresh: true);
-        
+
         // Then refresh controller data
         await _initializeSubscriptionData();
-        
+
         // Update local status immediately
         _hasActiveSubscription.value = true;
         _subscriptionStatus.value = 'active';
         _currentPlan.value = singlePlanId;
-        
-        AppLogger.log('SubscriptionController: Apple Pay subscription activated successfully');
-        
+
+        AppLogger.log(
+          'SubscriptionController: Apple Pay subscription activated successfully',
+        );
+
         PaymentValidationService.endPaymentSession();
         Get.back(); // Go back to previous screen
         Get.snackbar('Success', 'Welcome to Super Payments! 🎉');
@@ -748,7 +829,7 @@ class SubscriptionController extends GetxController {
     } catch (e) {
       AppLogger.log('Error processing Apple Pay subscription: $e');
       PaymentValidationService.endPaymentSession();
-      
+
       // Use proper error handling instead of showing raw exception
       await SubscriptionErrorHandler().handleSubscriptionError(
         errorType: 'payment_error',
@@ -767,24 +848,25 @@ class SubscriptionController extends GetxController {
       if (user == null) return;
 
       // Check for pending payment sessions
-      final sessionsQuery = await FirebaseFirestore.instance
-          .collection('payment_sessions')
-          .where('userId', isEqualTo: user.uid)
-          .where('status', isEqualTo: 'pending')
-          .orderBy('createdAt', descending: true)
-          .limit(1)
-          .get();
+      final sessionsQuery =
+          await FirebaseFirestore.instance
+              .collection('payment_sessions')
+              .where('userId', isEqualTo: user.uid)
+              .where('status', isEqualTo: 'pending')
+              .orderBy('createdAt', descending: true)
+              .limit(1)
+              .get();
 
       if (sessionsQuery.docs.isNotEmpty) {
         final sessionDoc = sessionsQuery.docs.first;
         final sessionData = sessionDoc.data();
         final createdAt = (sessionData['createdAt'] as Timestamp).toDate();
-        
+
         // If session is less than 10 minutes old, consider it active
         if (DateTime.now().difference(createdAt).inMinutes < 10) {
           _hasActivePendingSession.value = true;
           _pendingSessionId.value = sessionDoc.id;
-          
+
           // Start monitoring for completion
           _startSessionMonitoring();
         } else {
@@ -815,7 +897,7 @@ class SubscriptionController extends GetxController {
     if (_hasActivePendingSession.value) {
       AppLogger.log('Payment session timed out');
       _clearPendingSession();
-      
+
       // Show timeout message if user is still in the app
       Get.snackbar(
         'Payment Timeout',
@@ -833,13 +915,13 @@ class SubscriptionController extends GetxController {
         timer.cancel();
         return;
       }
-      
+
       // Check if enough time has passed since redirect
       if (_playStoreRedirectTime != null &&
           DateTime.now().difference(_playStoreRedirectTime!).inSeconds > 10) {
         _checkSubscriptionStatusAfterPlayStore();
       }
-      
+
       // Cancel after 5 minutes
       if (timer.tick > 60) {
         timer.cancel();
@@ -853,7 +935,7 @@ class SubscriptionController extends GetxController {
     try {
       // Force refresh subscription status
       await _checkSubscriptionStatus();
-      
+
       if (_hasActiveSubscription.value) {
         // Payment was successful
         _clearPendingSession();
@@ -876,9 +958,9 @@ class SubscriptionController extends GetxController {
         timer.cancel();
         return;
       }
-      
+
       _checkSubscriptionStatusAfterPlayStore();
-      
+
       // Cancel after 10 minutes
       if (timer.tick > 60) {
         timer.cancel();
@@ -894,15 +976,22 @@ class SubscriptionController extends GetxController {
     _pendingSessionId.value = '';
     _playStoreRedirectTime = null;
     _sessionTimeoutTimer?.cancel();
-    
+
     // Update session status in Firestore if exists
     if (sessionId.isNotEmpty) {
-      _batchService.addUpdate(
-        collection: 'payment_sessions',
-        documentId: sessionId,
-        data: {'status': 'cancelled', 'endedAt': FieldValue.serverTimestamp()},
-      ).then((_) => _batchService.flushBatch())
-        .catchError((e) => AppLogger.log('Error updating session status: $e'));
+      _batchService
+          .addUpdate(
+            collection: 'payment_sessions',
+            documentId: sessionId,
+            data: {
+              'status': 'cancelled',
+              'endedAt': FieldValue.serverTimestamp(),
+            },
+          )
+          .then((_) => _batchService.flushBatch())
+          .catchError(
+            (e) => AppLogger.log('Error updating session status: $e'),
+          );
     }
   }
 
@@ -910,7 +999,7 @@ class SubscriptionController extends GetxController {
   void handlePlayStoreReturn() {
     if (_hasActivePendingSession.value) {
       AppLogger.log('User returned from Play Store without completing payment');
-      
+
       // Give a short delay to check if payment was actually completed
       Future.delayed(Duration(seconds: 3), () {
         if (_hasActivePendingSession.value && !_hasActiveSubscription.value) {

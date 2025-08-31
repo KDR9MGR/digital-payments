@@ -6,14 +6,12 @@ class VideoBackgroundWidget extends StatefulWidget {
   final Widget child;
   final String videoUrl;
   final bool autoPlay;
-  final bool mute;
 
   const VideoBackgroundWidget({
     super.key,
     required this.child,
     this.videoUrl = 'https://youtu.be/TVIxF-SZFlo',
     this.autoPlay = false,
-    this.mute = true,
   });
 
   @override

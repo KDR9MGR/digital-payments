@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 
 import '../../controller/settings_controller.dart';
 import '../../routes/routes.dart';
-import '../../services/video_settings_service.dart';
+
 import '../../utils/error_debug_helper.dart';
 import '../../utils/custom_color.dart';
 import '../../utils/custom_style.dart';
@@ -89,9 +89,6 @@ class SettingsScreen extends StatelessWidget {
               isPremium: true,
             ),
             SizedBox(height: Dimensions.heightSize),
-            // Video Mute Setting
-            _videoMuteToggleWidget(),
-            SizedBox(height: Dimensions.heightSize),
             settingsItemWidget(
               controller,
               onTap: () {
@@ -114,23 +111,7 @@ class SettingsScreen extends StatelessWidget {
             SizedBox(height: Dimensions.heightSize),
             // Debug Error Management (only show if there are errors)
             _debugErrorManagementWidget(),
-            // settingsItemWidget(
-            //   controller,
-            //   onTap: () {
-            //     controller.navigateToTwoFaSecurity();
-            //   },
-            //   title: Strings.twoFASecurity.tr,
-            // ),
-            // SizedBox(
-            //   height: Dimensions.heightSize,
-            // ),
-            // settingsItemWidget(
-            //   controller,
-            //   onTap: () {
-            //     controller.navigateToChangeLanguageScreen();
-            //   },
-            //   title: Strings.changeLanguage.tr,
-            // ),
+
             SizedBox(height: 20), // Bottom padding
           ],
         ),
@@ -138,57 +119,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _videoMuteToggleWidget() {
-    final videoSettingsService = Get.find<VideoSettingsService>();
 
-    return Container(
-      padding: const EdgeInsets.all(15),
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: CustomColor.secondaryColor,
-        borderRadius: BorderRadius.circular(Dimensions.radius * 2),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              Icons.volume_off_outlined,
-              color: Colors.white.withValues(alpha: 0.8),
-              size: 20,
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Mute Videos',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: Dimensions.smallTextSize,
-              ),
-            ),
-          ),
-          Obx(
-            () => Switch(
-              value: videoSettingsService.isVideoMutedStream.value,
-              onChanged: (value) {
-                videoSettingsService.setVideoMute(value);
-              },
-              activeThumbColor: CustomColor.primaryColor,
-              inactiveThumbColor: Colors.grey,
-              inactiveTrackColor: Colors.grey.withValues(alpha: 0.3),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _debugErrorManagementWidget() {
     final errorStats = ErrorDebugHelper.getErrorStats();

@@ -86,18 +86,13 @@ class SettingsController extends GetxController {
           'Are you sure you want to delete your account? This action cannot be undone and will permanently remove all your data.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Get.back(), child: Text('Cancel')),
           TextButton(
             onPressed: () {
               Get.back();
               _deleteAccount();
             },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: Text('Delete'),
           ),
         ],
@@ -123,11 +118,11 @@ class SettingsController extends GetxController {
 
       // Clear local storage data
       await _clearLocalData();
-      
+
       // Delete Firebase account and Firestore data using UserProvider
       final userProvider = Get.find<UserProvider>();
       await userProvider.deleteAccount();
-      
+
       Get.back(); // Close loading dialog
       Get.snackbar(
         'Account Deleted',
@@ -135,7 +130,7 @@ class SettingsController extends GetxController {
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
-      
+
       // Navigate to login screen
       Get.offAllNamed(Routes.loginScreen);
     } catch (e) {
@@ -152,21 +147,10 @@ class SettingsController extends GetxController {
   Future<void> _clearLocalData() async {
     try {
       // Clear all local storage data
-      // This would normally use LocalStorage methods
-      // but we'll add the structure for now
-      
-      // Clear user preferences
-      // await LocalStorage.clearUserData();
-      
-      // Clear cached data
-      // await LocalStorage.clearCache();
-      
-      // Clear any stored tokens or session data
-      // await LocalStorage.clearTokens();
-      
+
       // Reset any app state
       selectedLanguage.value = '';
-      
+
       // Clear all text controllers
       firstNameController.clear();
       lastNameController.clear();
@@ -180,7 +164,6 @@ class SettingsController extends GetxController {
       oldPasswordController.clear();
       newPasswordController.clear();
       confirmController.clear();
-      
     } catch (e) {
       throw Exception('Failed to clear local data: ${e.toString()}');
     }

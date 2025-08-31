@@ -120,7 +120,9 @@ class _SplashScreenState extends State<SplashScreen> {
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: Colors.red.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Column(
                       children: [
@@ -212,12 +214,13 @@ class _SplashScreenState extends State<SplashScreen> {
             debugPrint('👤 Fetching user details...');
           }
 
-          // Fetch user details with timeout to prevent hanging
+          // Optimized user fetch using direct document access instead of query
           User? user = FirebaseAuth.instance.currentUser;
           if (user != null) {
-            QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+            // Use direct document access instead of query for better performance
+            DocumentSnapshot userDoc = await FirebaseFirestore.instance
                 .collection('users')
-                .where('userId', isEqualTo: user.uid)
+                .doc(user.uid)
                 .get()
                 .timeout(
                   const Duration(seconds: 10),
@@ -226,9 +229,9 @@ class _SplashScreenState extends State<SplashScreen> {
                   },
                 );
 
-            if (querySnapshot.docs.isNotEmpty) {
+            if (userDoc.exists && userDoc.data() != null) {
               final userModel = UserModel.fromMap(
-                querySnapshot.docs.first.data() as Map<String, dynamic>,
+                userDoc.data() as Map<String, dynamic>,
               );
               _userProvider.updateUserDirectly(userModel);
               if (kDebugMode) {
