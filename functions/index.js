@@ -760,7 +760,7 @@ exports.processMoovSubscription = functions.https.onCall(async (data, context) =
 
 // Configuration
 const GOOGLE_PLAY_PACKAGE_NAME = functions.config().googleplay?.package_name || 'com.yourapp.package';
-const SERVICE_ACCOUNT_FILE = path.join(__dirname, 'google-play-service-account.json');
+const SERVICE_ACCOUNT_FILE = path.join(__dirname, 'firebase-service-account.json');
 let GOOGLE_PLAY_SERVICE_ACCOUNT;
 if (fs.existsSync(SERVICE_ACCOUNT_FILE)) {
   try {
