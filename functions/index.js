@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require('firebase-admin/firestore');
 const axios = require('axios');
 const { google } = require('googleapis');
 const crypto = require('crypto');
@@ -203,7 +204,7 @@ async function handleAccountCreated(event) {
       await db.collection('users').doc(accountData.foreignId).set({
         moovAccountId: accountData.accountID,
         moovAccountStatus: accountData.status,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
     }
   } catch (error) {
@@ -221,7 +222,7 @@ async function handleTransferCompleted(event) {
     if (transferData.metadata && transferData.metadata.subscriptionId) {
       await db.collection('subscriptions').doc(transferData.metadata.subscriptionId).update({
         status: 'active',
-        lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
+        lastPaymentDate: FieldValue.serverTimestamp(),
         transferId: transferData.transferID,
         paymentStatus: 'completed',
       });
@@ -234,7 +235,7 @@ async function handleTransferCompleted(event) {
         currency: transferData.amount.currency,
         status: 'completed',
         userId: transferData.metadata.userId,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
       });
     }
   } catch (error) {
@@ -252,7 +253,7 @@ async function handleTransferFailed(event) {
     if (transferData.metadata && transferData.metadata.subscriptionId) {
       await db.collection('subscriptions').doc(transferData.metadata.subscriptionId).update({
         status: 'payment_failed',
-        lastPaymentAttempt: admin.firestore.FieldValue.serverTimestamp(),
+        lastPaymentAttempt: FieldValue.serverTimestamp(),
         transferId: transferData.transferID,
         paymentStatus: 'failed',
         failureReason: transferData.failureReason || 'Payment failed',
@@ -302,7 +303,7 @@ exports.checkSubscriptionStatus = functions.https.onCall(async (data, context) =
     }
 
     const subscription = subscriptionQuery.docs[0].data();
-    const now = new Date();
+    const now = FieldValue.serverTimestamp();
     const expiryDate = subscription.expiryDate?.toDate();
 
     // Check if subscription is still valid
@@ -318,7 +319,7 @@ exports.checkSubscriptionStatus = functions.https.onCall(async (data, context) =
       // Update expired subscription
       await db.collection('subscriptions').doc(subscriptionQuery.docs[0].id).update({
         status: 'expired',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       });
 
       return {
@@ -334,7 +335,13 @@ exports.checkSubscriptionStatus = functions.https.onCall(async (data, context) =
 });
 
 // Validate Google Play Store purchase
-exports.validateGooglePlayPurchase = functions.https.onCall(async (data, context) => {
+exports.validateGooglePlayPurchase = functions
+  .runWith({
+    memory: '1GB',
+    timeoutSeconds: 60,
+    maxInstances: 10
+  })
+  .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
@@ -402,7 +409,7 @@ exports.validateGooglePlayPurchase = functions.https.onCall(async (data, context
     
     // Check expiry
     const expiryDate = new Date(parseInt(purchase.expiryTimeMillis));
-    if (expiryDate <= new Date()) {
+    if (expiryDate <= FieldValue.serverTimestamp()) {
       throw new functions.https.HttpsError('failed-precondition', 'Subscription has expired');
     }
     
@@ -430,10 +437,10 @@ exports.validateGooglePlayPurchase = functions.https.onCall(async (data, context
       packageName: packageName || GOOGLE_PLAY_PACKAGE_NAME,
       googlePlayOrderId: purchase.orderId,
       autoRenewing: purchase.autoRenewing,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       expiryDate: expiryDate,
-      lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
-      validatedAt: admin.firestore.FieldValue.serverTimestamp()
+      lastPaymentDate: FieldValue.serverTimestamp(),
+      validatedAt: FieldValue.serverTimestamp()
     };
 
     // Create subscription record
@@ -447,7 +454,7 @@ exports.validateGooglePlayPurchase = functions.https.onCall(async (data, context
       subscriptionId: subscriptionRef.id,
       subscriptionStatus: 'active',
       subscriptionExpiryDate: expiryDate,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     
     console.log(`Successfully validated Google Play purchase for user ${userId}`);
@@ -482,7 +489,13 @@ exports.validateGooglePlayPurchase = functions.https.onCall(async (data, context
 });
 
 // Validate Apple Pay purchase
-exports.validateApplePayPurchase = functions.https.onCall(async (data, context) => {
+exports.validateApplePayPurchase = functions
+  .runWith({
+    memory: '1GB',
+    timeoutSeconds: 60,
+    maxInstances: 10
+  })
+  .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
@@ -505,9 +518,9 @@ exports.validateApplePayPurchase = functions.https.onCall(async (data, context) 
       transactionId: transactionId,
       receiptData: receiptData,
       productId: productId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      lastPaymentDate: admin.firestore.FieldValue.serverTimestamp()
+      lastPaymentDate: FieldValue.serverTimestamp()
     };
 
     // Create subscription record
@@ -518,7 +531,7 @@ exports.validateApplePayPurchase = functions.https.onCall(async (data, context) 
       isSubscribed: true,
       subscriptionId: subscriptionRef.id,
       subscriptionStatus: 'active',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
     return {
@@ -533,7 +546,13 @@ exports.validateApplePayPurchase = functions.https.onCall(async (data, context) 
 });
 
 // Validate platform payment (Apple Pay/Google Pay)
-exports.validatePlatformPayment = functions.https.onCall(async (data, context) => {
+exports.validatePlatformPayment = functions
+  .runWith({
+    memory: '1GB',
+    timeoutSeconds: 60,
+    maxInstances: 10
+  })
+  .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
@@ -572,8 +591,8 @@ exports.validatePlatformPayment = functions.https.onCall(async (data, context) =
       currency: currency,
       paymentMethod: paymentMethod,
       status: 'completed',
-      timestamp: timestamp ? new Date(timestamp) : admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: timestamp ? new Date(timestamp) : FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       validated: true
     };
     
@@ -589,9 +608,9 @@ exports.validatePlatformPayment = functions.https.onCall(async (data, context) =
       currency: currency,
       paymentId: paymentRef.id,
       transactionId: transactionId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
+      lastPaymentDate: FieldValue.serverTimestamp(),
       autoRenew: true,
       validationSource: 'platform_payment'
     };
@@ -609,7 +628,7 @@ exports.validatePlatformPayment = functions.https.onCall(async (data, context) =
       subscriptionRef = existingSubscription.docs[0].ref;
       await subscriptionRef.update({
         ...subscriptionData,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       });
     } else {
       // Create new subscription
@@ -622,7 +641,7 @@ exports.validatePlatformPayment = functions.https.onCall(async (data, context) =
       subscriptionId: subscriptionRef.id,
       subscriptionStatus: 'active',
       lastPaymentMethod: paymentMethod,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     
     console.log(`Platform payment validated successfully for user ${userId}`);
@@ -645,7 +664,7 @@ exports.validatePlatformPayment = functions.https.onCall(async (data, context) =
         paymentMethodId: paymentMethodId,
         transactionId: transactionId,
         error: error.message,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       });
     } catch (logError) {
       console.error('Error logging validation failure:', logError);
@@ -818,7 +837,7 @@ exports.checkExpiredSubscriptions = functions.pubsub.schedule('0 * * * *')
           // Grace period has ended, mark as expired
           batch.update(doc.ref, {
             status: 'expired',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
             gracePeriodEnded: true
           });
           
@@ -828,14 +847,14 @@ exports.checkExpiredSubscriptions = functions.pubsub.schedule('0 * * * *')
             batch.update(userRef, {
               isSubscribed: false,
               subscriptionStatus: 'expired',
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              updatedAt: FieldValue.serverTimestamp()
             });
           }
         } else {
           // Still in grace period, mark as grace_period
           batch.update(doc.ref, {
             status: 'grace_period',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: FieldValue.serverTimestamp()
           });
         }
         
@@ -859,7 +878,7 @@ exports.checkExpiredSubscriptions = functions.pubsub.schedule('0 * * * *')
       await db.collection('analytics').add({
         type: 'expired_subscriptions_check',
         processedCount: processedCount,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       });
       
     } catch (error) {
@@ -867,6 +886,87 @@ exports.checkExpiredSubscriptions = functions.pubsub.schedule('0 * * * *')
       throw error;
     }
   });
+
+// Manual check for expired subscriptions
+exports.checkExpiredSubscriptionsManual = functions.https.onCall(async (data, context) => {
+  console.log('Manually triggered expired subscriptions check...');
+  
+  try {
+    const now = FieldValue.serverTimestamp();
+    const gracePeriodEnd = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000)); // 7 days ago
+    
+    // Find subscriptions that are expired but still marked as active
+    const expiredQuery = await db.collection('subscriptions')
+      .where('status', '==', 'active')
+      .where('expiryDate', '<', now)
+      .get();
+    
+    const batch = db.batch();
+    let processedCount = 0;
+    
+    for (const doc of expiredQuery.docs) {
+      const subscription = doc.data();
+      const expiryDate = subscription.expiryDate.toDate();
+      
+      if (expiryDate < gracePeriodEnd) {
+        // Grace period has ended, mark as expired
+        batch.update(doc.ref, {
+          status: 'expired',
+          updatedAt: FieldValue.serverTimestamp(),
+          gracePeriodEnded: true
+        });
+        
+        // Update user document
+        if (subscription.userId) {
+          const userRef = db.collection('users').doc(subscription.userId);
+          batch.update(userRef, {
+            isSubscribed: false,
+            subscriptionStatus: 'expired',
+            updatedAt: FieldValue.serverTimestamp()
+          });
+        }
+      } else {
+        // Still in grace period, mark as grace_period
+        batch.update(doc.ref, {
+          status: 'grace_period',
+          updatedAt: FieldValue.serverTimestamp()
+        });
+      }
+      
+      processedCount++;
+      
+      // Commit batch every 500 operations
+      if (processedCount % 500 === 0) {
+        await batch.commit();
+        console.log(`Processed ${processedCount} expired subscriptions`);
+      }
+    }
+    
+    // Commit remaining operations
+    if (processedCount % 500 !== 0) {
+      await batch.commit();
+    }
+    
+    console.log(`Completed manual expired subscriptions check. Processed: ${processedCount}`);
+    
+    // Log analytics
+    await db.collection('analytics').add({
+      type: 'manual_expired_subscriptions_check',
+      processedCount: processedCount,
+      timestamp: FieldValue.serverTimestamp()
+    });
+    
+    return {
+      success: true,
+      message: 'Manual check completed',
+      processedCount: processedCount
+    };
+    
+  } catch (error) {
+    console.error('Error in manual expired subscriptions check:', error);
+    throw new functions.https.HttpsError('internal', 'Manual check failed');
+  }
+});
 
 // Process subscription renewals daily
 exports.processSubscriptionRenewals = functions.pubsub.schedule('0 2 * * *')
@@ -930,7 +1030,7 @@ exports.processSubscriptionRenewals = functions.pubsub.schedule('0 2 * * *')
         processedCount: processedCount,
         successCount: successCount,
         failureCount: failureCount,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       });
       
     } catch (error) {
@@ -987,7 +1087,7 @@ exports.generateDailyAnalytics = functions.pubsub.schedule('0 1 * * *')
         newSubscriptions: newSubscriptions.size,
         cancelledSubscriptions: cancelledSubscriptions.size,
         totalRevenue: totalRevenue,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       });
       
       console.log(`Daily analytics generated for ${yesterday.toISOString().split('T')[0]}`);
@@ -1071,20 +1171,26 @@ exports.validateGooglePlayPurchaseReal = functions.https.onCall(async (data, con
     
     // Check if subscription is expired
     const expiryDate = new Date(parseInt(purchase.expiryTimeMillis));
-    const now = new Date();
+    const now = FieldValue.serverTimestamp();
     
     if (expiryDate <= now) {
       console.error(`Subscription expired: ${expiryDate.toISOString()}`);
       throw new functions.https.HttpsError('invalid-argument', 'Subscription has expired');
     }
     
-    // Get product pricing (you should configure this based on your products)
-    const productPricing = {
-      'super_payments_monthly': { amount: 1.99, currency: 'USD' },
-      // Add more products as needed
+    // Validate product ID against allowed subscription products
+    const allowedProducts = {
+      'super_payments_monthly': { amount: 1.99, currency: 'USD', name: 'Super Payments Monthly' },
+      'DP07071990': { amount: 1.99, currency: 'USD', name: 'Super Payments Monthly (iOS)' },
+      '07071990': { amount: 1.99, currency: 'USD', name: 'Super Payments Monthly (Android)' }
     };
     
-    const pricing = productPricing[productId] || { amount: 1.99, currency: 'USD' };
+    if (!allowedProducts[productId]) {
+      console.error(`Invalid product ID: ${productId}`);
+      throw new functions.https.HttpsError('invalid-argument', `Product ID '${productId}' is not a valid subscription product`);
+    }
+    
+    const pricing = allowedProducts[productId];
     
     const subscriptionData = {
       userId: userId,
@@ -1100,10 +1206,10 @@ exports.validateGooglePlayPurchaseReal = functions.https.onCall(async (data, con
       autoRenew: purchase.autoRenewing || false,
       paymentState: purchase.paymentState,
       acknowledgementState: purchase.acknowledgementState,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       expiryDate: expiryDate,
-      lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
-      validatedAt: admin.firestore.FieldValue.serverTimestamp()
+      lastPaymentDate: FieldValue.serverTimestamp(),
+      validatedAt: FieldValue.serverTimestamp()
     };
 
     // Create subscription record
@@ -1116,7 +1222,7 @@ exports.validateGooglePlayPurchaseReal = functions.https.onCall(async (data, con
       subscriptionId: subscriptionRef.id,
       subscriptionStatus: 'active',
       subscriptionExpiryDate: expiryDate,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     
     console.log(`Successfully validated Google Play purchase for user ${userId}`);
@@ -1165,6 +1271,20 @@ exports.validateApplePayPurchaseReal = functions.https.onCall(async (data, conte
 
   console.log('Validating Apple receipt for user:', userId, 'product:', productId);
 
+  // Validate product ID against allowed subscription products
+  const allowedProducts = {
+    'super_payments_monthly': { amount: 1.99, currency: 'USD', name: 'Super Payments Monthly' },
+    'DP07071990': { amount: 1.99, currency: 'USD', name: 'Super Payments Monthly (iOS)' },
+    '07071990': { amount: 1.99, currency: 'USD', name: 'Super Payments Monthly (Android)' }
+  };
+  
+  if (!allowedProducts[productId]) {
+    console.error(`Invalid product ID: ${productId}`);
+    throw new functions.https.HttpsError('invalid-argument', `Product ID '${productId}' is not a valid subscription product`);
+  }
+  
+  const pricing = allowedProducts[productId];
+
   try {
     // Check for duplicate receipt
     const existingSubscription = await db.collection('subscriptions')
@@ -1202,7 +1322,7 @@ exports.validateApplePayPurchaseReal = functions.https.onCall(async (data, conte
 
     // Check if subscription is still valid
     const expiryDate = new Date(parseInt(subscription.expires_date_ms));
-    const now = new Date();
+    const now = FieldValue.serverTimestamp();
     
     if (expiryDate <= now) {
       throw new functions.https.HttpsError('failed-precondition', 'Subscription has expired');
@@ -1215,6 +1335,9 @@ exports.validateApplePayPurchaseReal = functions.https.onCall(async (data, conte
       userId: userId,
       platform: 'apple',
       productId: productId,
+      productName: pricing.name,
+      amount: pricing.amount,
+      currency: pricing.currency,
       transactionId: subscription.transaction_id,
       originalTransactionId: subscription.original_transaction_id,
       receiptData: receiptData,
@@ -1222,8 +1345,10 @@ exports.validateApplePayPurchaseReal = functions.https.onCall(async (data, conte
       expiryDate: expiryDate,
       autoRenewing: subscription.is_in_intro_offer_period === 'false' && subscription.is_trial_period === 'false',
       status: 'active',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      paymentMethod: 'apple_pay',
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      validatedAt: FieldValue.serverTimestamp(),
       isTrialPeriod: subscription.is_trial_period === 'true',
       isInIntroOfferPeriod: subscription.is_in_intro_offer_period === 'true',
       cancellationDate: subscription.cancellation_date_ms ? new Date(parseInt(subscription.cancellation_date_ms)) : null
@@ -1238,7 +1363,7 @@ exports.validateApplePayPurchaseReal = functions.https.onCall(async (data, conte
       subscriptionPlatform: 'apple',
       subscriptionExpiryDate: expiryDate,
       subscriptionId: subscriptionRef.id,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
     console.log('User document updated for Apple subscription');
@@ -1411,15 +1536,15 @@ exports.cancelSubscription = functions.https.onCall(async (data, context) => {
     await db.collection('subscriptions').doc(subscriptionId).update({
       status: 'cancelled',
       cancellationReason: reason || 'User requested',
-      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      cancelledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
     });
     
     // Update user document
     await db.collection('users').doc(userId).set({
       isSubscribed: false,
       subscriptionStatus: 'cancelled',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     
     // Log cancellation event
@@ -1428,7 +1553,7 @@ exports.cancelSubscription = functions.https.onCall(async (data, context) => {
       userId: userId,
       eventType: 'cancellation',
       reason: reason || 'User requested',
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: FieldValue.serverTimestamp()
     });
     
     return {
@@ -1472,8 +1597,8 @@ async function processGooglePlayRenewal(subscription, subscriptionId) {
       
       await db.collection('subscriptions').doc(subscriptionId).update({
         expiryDate: newExpiryDate,
-        lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        lastPaymentDate: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
       });
       
       return true;
@@ -1507,9 +1632,9 @@ async function processApplePayRenewal(subscription, subscriptionId) {
       
       await db.collection('subscriptions').doc(subscriptionId).update({
         expiryDate: newExpiryDate,
-        lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
+        lastPaymentDate: FieldValue.serverTimestamp(),
         appleTransactionId: latestReceipt.transaction_id,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       });
       
       return true;
@@ -1556,9 +1681,9 @@ async function processMoovRenewal(subscription, subscriptionId) {
       
       await db.collection('subscriptions').doc(subscriptionId).update({
         expiryDate: newExpiryDate,
-        lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
+        lastPaymentDate: FieldValue.serverTimestamp(),
         moovTransferId: response.data.transferID,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       });
       
       return true;
@@ -1607,7 +1732,7 @@ async function handleGooglePlaySubscriptionNotification(data) {
       case 1: // SUBSCRIPTION_RECOVERED
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'active',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
@@ -1619,8 +1744,8 @@ async function handleGooglePlaySubscriptionNotification(data) {
       case 3: // SUBSCRIPTION_CANCELED
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'cancelled',
-          cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          cancelledAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
@@ -1631,21 +1756,21 @@ async function handleGooglePlaySubscriptionNotification(data) {
       case 5: // SUBSCRIPTION_ON_HOLD
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'on_hold',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
       case 6: // SUBSCRIPTION_IN_GRACE_PERIOD
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'grace_period',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
       case 7: // SUBSCRIPTION_RESTARTED
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'active',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
@@ -1656,14 +1781,14 @@ async function handleGooglePlaySubscriptionNotification(data) {
       case 9: // SUBSCRIPTION_DEFERRED
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'deferred',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
       case 10: // SUBSCRIPTION_PAUSED
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'paused',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
@@ -1674,15 +1799,15 @@ async function handleGooglePlaySubscriptionNotification(data) {
       case 12: // SUBSCRIPTION_REVOKED
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'revoked',
-          revokedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          revokedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
       case 13: // SUBSCRIPTION_EXPIRED
         await db.collection('subscriptions').doc(subscriptionDoc.id).update({
           status: 'expired',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         });
         break;
         
@@ -1697,7 +1822,7 @@ async function handleGooglePlaySubscriptionNotification(data) {
       eventType: 'google_play_notification',
       notificationType: notificationType,
       purchaseToken: purchaseToken,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: FieldValue.serverTimestamp()
     });
     
   } catch (error) {
@@ -1715,7 +1840,7 @@ async function handleAppleInitialBuy(notification) {
     await db.collection('subscription_events').add({
       eventType: 'apple_initial_buy',
       notification: notification,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: FieldValue.serverTimestamp()
     });
     
   } catch (error) {
@@ -1749,9 +1874,9 @@ async function handleAppleRenewal(notification) {
       await db.collection('subscriptions').doc(subscriptionDoc.id).update({
         status: 'active',
         expiryDate: newExpiryDate,
-        lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
+        lastPaymentDate: FieldValue.serverTimestamp(),
         appleTransactionId: latestReceipt.transaction_id,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       });
       
       // Log the event
@@ -1759,7 +1884,7 @@ async function handleAppleRenewal(notification) {
         subscriptionId: subscriptionDoc.id,
         eventType: 'apple_renewal',
         transactionId: latestReceipt.transaction_id,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       });
     }
     
@@ -1792,8 +1917,8 @@ async function handleAppleRenewalFailure(notification) {
       
       await db.collection('subscriptions').doc(subscriptionDoc.id).update({
         status: 'payment_failed',
-        lastPaymentAttempt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        lastPaymentAttempt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
       });
       
       // Log the event
@@ -1801,7 +1926,7 @@ async function handleAppleRenewalFailure(notification) {
         subscriptionId: subscriptionDoc.id,
         eventType: 'apple_renewal_failure',
         originalTransactionId: originalTransactionId,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       });
     }
     
@@ -1834,9 +1959,9 @@ async function handleAppleCancellation(notification) {
       
       await db.collection('subscriptions').doc(subscriptionDoc.id).update({
         status: 'cancelled',
-        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+        cancelledAt: FieldValue.serverTimestamp(),
         cancellationReason: 'Apple cancellation',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       });
       
       // Update user document
@@ -1845,7 +1970,7 @@ async function handleAppleCancellation(notification) {
         await db.collection('users').doc(subscription.userId).set({
           isSubscribed: false,
           subscriptionStatus: 'cancelled',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
       }
       
@@ -1855,7 +1980,7 @@ async function handleAppleCancellation(notification) {
         userId: subscription.userId,
         eventType: 'apple_cancellation',
         originalTransactionId: originalTransactionId,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       });
     }
     
@@ -1888,8 +2013,8 @@ async function handleAppleRefund(notification) {
       
       await db.collection('subscriptions').doc(subscriptionDoc.id).update({
         status: 'refunded',
-        refundedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        refundedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
       });
       
       // Update user document
@@ -1898,7 +2023,7 @@ async function handleAppleRefund(notification) {
         await db.collection('users').doc(subscription.userId).set({
           isSubscribed: false,
           subscriptionStatus: 'refunded',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
       }
       
@@ -1908,7 +2033,7 @@ async function handleAppleRefund(notification) {
         userId: subscription.userId,
         eventType: 'apple_refund',
         originalTransactionId: originalTransactionId,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       });
     }
     
