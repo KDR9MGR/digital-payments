@@ -35,7 +35,8 @@ class SubscriptionService {
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   final GetStorage _storage = GetStorage();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final SubscriptionFallbackService _fallbackService = SubscriptionFallbackService();
+  final SubscriptionFallbackService _fallbackService =
+      SubscriptionFallbackService();
   final SubscriptionErrorHandler _errorHandler = SubscriptionErrorHandler();
 
   // Use centralized subscription configuration
@@ -65,15 +66,15 @@ class SubscriptionService {
   // Validation intervals
   static const Duration _validationInterval = Duration(hours: 24);
   static const Duration _expiryCheckInterval = Duration(minutes: 30);
-  
+
   // Grace period configuration
   static const Duration _gracePeriodDuration = Duration(days: 3);
   static const String _gracePeriodStartKey = 'grace_period_start';
   static const String _gracePeriodNotifiedKey = 'grace_period_notified';
-  
+
   // Timer for periodic expiry checking
   Timer? _expiryCheckTimer;
-  
+
   // Grace period state
   DateTime? _gracePeriodStart;
   bool _isInGracePeriod = false;
@@ -112,16 +113,16 @@ class SubscriptionService {
 
         // Initialize fallback service
         await _fallbackService.initialize();
-        
+
         // Initialize error handler
         await _errorHandler.initialize();
-        
+
         // Load cached subscription status
         _loadSubscriptionStatus();
-        
+
         // Start periodic expiry checking if subscription is active
         _schedulePeriodicExpiryCheck();
-        
+
         AppLogger.log(
           'Subscription service initialized successfully. Available: $_isAvailable, Active: $_hasActiveSubscription',
         );
@@ -197,6 +198,17 @@ class SubscriptionService {
             AppLogger.log('ERROR: $errorMsg');
 
             if (attempt == maxRetries) {
+              // Show user-friendly error for missing products
+              Get.snackbar(
+                'Subscription Unavailable',
+                'Subscription options are not available at the moment. Please try again later or contact support.',
+                snackPosition: SnackPosition.TOP,
+                backgroundColor: Get.theme.colorScheme.error,
+                colorText: Get.theme.colorScheme.onError,
+                duration: const Duration(seconds: 6),
+                isDismissible: true,
+              );
+              
               throw SubscriptionException(
                 'No subscription products available',
                 code: 'NO_PRODUCTS_FOUND',
@@ -238,18 +250,37 @@ class SubscriptionService {
     }
   }
 
-  /// Handle initialization errors
+  /// Handle initialization errors with improved user feedback
   void _handleInitializationError(String message) {
     AppLogger.log('ERROR: Handling initialization error: $message');
 
-    // Show user-friendly error message for production
+    // Provide specific error messages based on the error type
+    String userMessage;
+    String title;
+    
+    if (message.contains('not available')) {
+      title = 'In-App Purchases Unavailable';
+      userMessage = 'In-app purchases are not available on this device. Please check your device settings or try again later.';
+    } else if (message.contains('products')) {
+      title = 'Subscription Options Unavailable';
+      userMessage = 'Subscription options are temporarily unavailable. Please check your internet connection and try again.';
+    } else if (message.contains('network') || message.contains('connection')) {
+      title = 'Connection Error';
+      userMessage = 'Unable to connect to subscription services. Please check your internet connection and try again.';
+    } else {
+      title = 'Premium Features';
+      userMessage = 'Premium features require an active subscription. Please try again or contact support if the issue persists.';
+    }
+
+    // Show user-friendly error message
     Get.snackbar(
-      'Premium Features',
-      'Premium features require an active subscription. Please check your connection and try again.',
+      title,
+      userMessage,
       snackPosition: SnackPosition.TOP,
-      backgroundColor: Get.theme.colorScheme.primary,
-      colorText: Get.theme.colorScheme.onPrimary,
-      duration: const Duration(seconds: 4),
+      backgroundColor: Get.theme.colorScheme.error,
+      colorText: Get.theme.colorScheme.onError,
+      duration: const Duration(seconds: 6),
+      isDismissible: true,
     );
   }
 
@@ -339,15 +370,25 @@ class SubscriptionService {
   Future<void> _handleSuccessfulPurchase(
     PurchaseDetails purchaseDetails,
   ) async {
+    AppLogger.log(
+      'DEBUG: Handling successful purchase for product: ${purchaseDetails.productID}',
+    );
+    AppLogger.log('DEBUG: Configured product IDs: $_productIds');
+    AppLogger.log(
+      'DEBUG: Product ID match: ${_productIds.contains(purchaseDetails.productID)}',
+    );
+
     if (_productIds.contains(purchaseDetails.productID)) {
+      AppLogger.log('DEBUG: Product ID matches, proceeding with verification');
       // Verify purchase with server-side validation
       if (await _verifyPurchase(purchaseDetails)) {
+        AppLogger.log('DEBUG: Purchase verification successful');
         final wasSubscribed = _hasActiveSubscription;
         _hasActiveSubscription = true;
 
         // Set expiry date (30 days from now for monthly subscription)
         _subscriptionExpiry = DateTime.now().add(const Duration(days: 30));
-        
+
         // Clear grace period if user was in one
         if (_isInGracePeriod) {
           _clearGracePeriod();
@@ -371,13 +412,24 @@ class SubscriptionService {
           );
         }
 
+        // CRITICAL FIX: Force notify all listeners of subscription status change
+        // This ensures immediate UI updates across the app
+        _subscriptionStatusController.add(true);
+        AppLogger.log('Notified all subscription listeners of status change');
+        
+        // Also trigger a delayed refresh to ensure all controllers are updated
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _subscriptionStatusController.add(true);
+          AppLogger.log('Secondary notification sent to ensure UI updates');
+        });
+
         AppLogger.log(
           'Subscription activated with secure storage: ${purchaseDetails.productID}',
         );
 
         // Schedule periodic expiry checking for new subscription
         _schedulePeriodicExpiryCheck();
-        
+
         // Notify listeners of subscription status change
         if (!wasSubscribed) {
           _subscriptionStatusController.add(true);
@@ -399,11 +451,15 @@ class SubscriptionService {
   /// Verify purchase with server-side validation for production security
   Future<bool> _verifyPurchase(PurchaseDetails purchaseDetails) async {
     try {
+      AppLogger.log(
+        'DEBUG: Starting purchase verification for product: ${purchaseDetails.productID}',
+      );
       final user = _auth.currentUser;
       if (user == null) {
-        AppLogger.log('No authenticated user for purchase verification');
+        AppLogger.log('DEBUG: No authenticated user for purchase verification');
         return false;
       }
+      AppLogger.log('DEBUG: User authenticated: ${user.uid}');
 
       // Get receipt data and purchase token based on platform
       String receiptData = '';
@@ -415,12 +471,14 @@ class SubscriptionService {
       } else {
         // For Android, get purchase token from verification data
         receiptData = purchaseDetails.verificationData.localVerificationData;
-        
+
         // Extract purchase token from Android verification data
         try {
           final verificationData = jsonDecode(receiptData);
-          purchaseToken = verificationData['purchaseToken'] ?? purchaseDetails.purchaseID;
-          packageName = verificationData['packageName'] ?? 'com.yourapp.package';
+          purchaseToken =
+              verificationData['purchaseToken'] ?? purchaseDetails.purchaseID;
+          packageName =
+              verificationData['packageName'] ?? 'com.yourapp.package';
         } catch (e) {
           AppLogger.log('Error parsing Android verification data: $e');
           purchaseToken = purchaseDetails.purchaseID;
@@ -429,7 +487,9 @@ class SubscriptionService {
       }
 
       if (receiptData.isEmpty && purchaseToken == null) {
-        AppLogger.log('No receipt data or purchase token available for verification');
+        AppLogger.log(
+          'No receipt data or purchase token available for verification',
+        );
         return false;
       }
 
@@ -446,23 +506,37 @@ class SubscriptionService {
 
       if (validationResult.isValid) {
         AppLogger.log(
-          'Purchase verification successful for: ${purchaseDetails.productID}',
+          'DEBUG: Purchase verification successful for: ${purchaseDetails.productID}',
         );
-        
+        AppLogger.log(
+          'DEBUG: Validation result expiry date: ${validationResult.expiryDate}',
+        );
+
         // Update local subscription status with validated data
         if (validationResult.expiryDate != null) {
           _subscriptionExpiry = validationResult.expiryDate!;
           _hasActiveSubscription = true;
           _lastValidationTime = DateTime.now();
-          
+
+          AppLogger.log(
+            'DEBUG: Updated subscription status - Active: $_hasActiveSubscription, Expiry: $_subscriptionExpiry',
+          );
           _saveSubscriptionStatus();
+
+          // Also save to regular storage for immediate access
+          _storage.write(_subscriptionStatusKey, true);
+          _storage.write(_lastCheckKey, DateTime.now().millisecondsSinceEpoch);
+
           _subscriptionStatusController.add(true);
+          AppLogger.log(
+            'DEBUG: Subscription status saved to both secure and regular storage',
+          );
         }
-        
+
         return true;
       } else {
         AppLogger.log(
-          'Purchase verification failed: ${validationResult.errorMessage}',
+          'DEBUG: Purchase verification failed: ${validationResult.errorMessage}',
         );
         return false;
       }
@@ -566,11 +640,14 @@ class SubscriptionService {
 
       // Determine error type for comprehensive handling
       String errorType = 'payment_error';
-      if (e.toString().contains('user_cancelled') || e.toString().contains('UserCancel')) {
+      if (e.toString().contains('user_cancelled') ||
+          e.toString().contains('UserCancel')) {
         errorType = 'user_cancelled';
-      } else if (e.toString().contains('network') || e.toString().contains('connection')) {
+      } else if (e.toString().contains('network') ||
+          e.toString().contains('connection')) {
         errorType = 'network_error';
-      } else if (e.toString().contains('billing_unavailable') || e.toString().contains('BillingUnavailable')) {
+      } else if (e.toString().contains('billing_unavailable') ||
+          e.toString().contains('BillingUnavailable')) {
         errorType = 'service_unavailable';
       } else if (e.toString().contains('timeout')) {
         errorType = 'timeout_error';
@@ -606,16 +683,53 @@ class SubscriptionService {
     try {
       final user = _auth.currentUser;
       if (user == null) {
+        AppLogger.log(
+          'DEBUG: No authenticated user, subscription status: false',
+        );
         _hasActiveSubscription = false;
         _storage.write(_subscriptionStatusKey, false);
         return false;
       }
 
-      // Always check with backend for accurate status
-      if (forceRefresh || shouldCheckSubscription()) {
+      AppLogger.log('DEBUG: Checking subscription for user: ${user.uid}');
+      AppLogger.log(
+        'DEBUG: Current subscription status: $_hasActiveSubscription',
+      );
+      AppLogger.log(
+        'DEBUG: Force refresh: $forceRefresh, Should check: ${shouldCheckSubscription()}',
+      );
+
+      // Check local storage first for quick response
+      final localStatus = _storage.read(_subscriptionStatusKey) ?? false;
+      AppLogger.log('DEBUG: Local storage status: $localStatus');
+
+      // CRITICAL FIX: Always validate with backend when force refresh is requested
+      // This ensures the app gets the most up-to-date subscription status
+      if (forceRefresh) {
+        AppLogger.log('DEBUG: Force refresh requested - validating with backend');
+        await _validateSubscriptionWithBackend();
+        // Immediately notify listeners of updated status
+        _subscriptionStatusController.add(_hasActiveSubscription);
+        AppLogger.log('DEBUG: Force refresh completed, status: $_hasActiveSubscription');
+        return _hasActiveSubscription;
+      }
+
+      // If we have a positive local status and no force refresh, return it
+      if (localStatus && !shouldCheckSubscription()) {
+        _hasActiveSubscription = localStatus;
+        AppLogger.log('DEBUG: Using cached positive status: $localStatus');
+        return localStatus;
+      }
+
+      // Check with backend for accurate status
+      if (shouldCheckSubscription()) {
+        AppLogger.log('DEBUG: Validating subscription with backend');
         await _validateSubscriptionWithBackend();
       }
 
+      AppLogger.log(
+        'DEBUG: Final subscription status: $_hasActiveSubscription',
+      );
       return _hasActiveSubscription;
     } catch (e) {
       AppLogger.log('Error checking subscription status: $e');
@@ -647,13 +761,13 @@ class SubscriptionService {
           'subscriptionExpiry': _subscriptionExpiry?.millisecondsSinceEpoch,
           'lastValidationTime': _lastValidationTime?.millisecondsSinceEpoch,
         };
-        
+
         final fallbackSuccess = await _fallbackService.handleValidationFailure(
           failureReason: e.toString(),
           userId: user.uid,
           lastKnownSubscriptionData: lastKnownData,
         );
-        
+
         if (fallbackSuccess) {
           AppLogger.log('Fallback validation successful in isUserSubscribed');
           return true;
@@ -692,7 +806,7 @@ class SubscriptionService {
       );
     } catch (e) {
       AppLogger.log('Backend validation failed: $e');
-      
+
       // Handle error with comprehensive error handler
       final user = _auth.currentUser;
       final handled = await _errorHandler.handleSubscriptionError(
@@ -711,7 +825,7 @@ class SubscriptionService {
         AppLogger.log('Error handler resolved backend validation issue');
         return;
       }
-      
+
       // Try fallback strategies before giving up
       if (user != null) {
         final lastKnownData = {
@@ -719,13 +833,13 @@ class SubscriptionService {
           'subscriptionExpiry': _subscriptionExpiry?.millisecondsSinceEpoch,
           'lastValidationTime': _lastValidationTime?.millisecondsSinceEpoch,
         };
-        
+
         final fallbackSuccess = await _fallbackService.handleValidationFailure(
           failureReason: e.toString(),
           userId: user.uid,
           lastKnownSubscriptionData: lastKnownData,
         );
-        
+
         if (fallbackSuccess) {
           AppLogger.log('Fallback validation successful');
           // Update subscription status based on fallback result
@@ -734,7 +848,7 @@ class SubscriptionService {
           return;
         }
       }
-      
+
       rethrow;
     }
   }
@@ -766,7 +880,7 @@ class SubscriptionService {
       AppLogger.log('Firebase validation result: $isActive, saved to storage');
     } catch (e) {
       AppLogger.log('Firebase validation failed: $e');
-      
+
       // Handle error with comprehensive error handler
       await _errorHandler.handleSubscriptionError(
         errorType: 'validation_error',
@@ -778,7 +892,7 @@ class SubscriptionService {
           'subscriptionExpiry': _subscriptionExpiry?.millisecondsSinceEpoch,
         },
       );
-      
+
       // Don't throw here, let platform validation be the fallback
     }
   }
@@ -801,8 +915,6 @@ class SubscriptionService {
   bool getCachedSubscriptionStatus() {
     return _storage.read(_subscriptionStatusKey) ?? false;
   }
-
-
 
   /// Check if user is in offline grace period
   bool isInOfflineGracePeriod() {
@@ -864,32 +976,32 @@ class SubscriptionService {
           lastValidation,
         );
       }
-      
+
       // Load grace period state
       final gracePeriodStartTimestamp = _storage.read(_gracePeriodStartKey);
       if (gracePeriodStartTimestamp != null) {
         _gracePeriodStart = DateTime.fromMillisecondsSinceEpoch(
           gracePeriodStartTimestamp,
         );
-        
+
         // Check if still in grace period
         final gracePeriodEnd = _gracePeriodStart!.add(_gracePeriodDuration);
         _isInGracePeriod = DateTime.now().isBefore(gracePeriodEnd);
-        
+
         // If grace period has ended, clear it
         if (!_isInGracePeriod) {
           _clearGracePeriod();
         }
       }
-      
+
       // Load grace period notification state
       _gracePeriodNotified = _storage.read(_gracePeriodNotifiedKey) ?? false;
 
       // Schedule periodic validation and expiry checking if subscription is active
-        if (_hasActiveSubscription) {
-          _schedulePeriodicValidation();
-          _schedulePeriodicExpiryCheck();
-        }
+      if (_hasActiveSubscription) {
+        _schedulePeriodicValidation();
+        _schedulePeriodicExpiryCheck();
+      }
 
       AppLogger.log('Subscription status loaded: $_hasActiveSubscription');
     } catch (e) {
@@ -919,14 +1031,22 @@ class SubscriptionService {
         );
       }
       _storage.write(_lastValidationKey, DateTime.now().millisecondsSinceEpoch);
-      
+
       // Save grace period state
       if (_gracePeriodStart != null) {
-        _storage.write(_gracePeriodStartKey, _gracePeriodStart!.millisecondsSinceEpoch);
+        _storage.write(
+          _gracePeriodStartKey,
+          _gracePeriodStart!.millisecondsSinceEpoch,
+        );
       } else {
         _storage.remove(_gracePeriodStartKey);
       }
       _storage.write(_gracePeriodNotifiedKey, _gracePeriodNotified);
+
+      // Immediately notify listeners of subscription status change
+      _subscriptionStatusController.add(
+        _hasActiveSubscription || _isInGracePeriod,
+      );
 
       AppLogger.log(
         'Subscription status saved securely: $_hasActiveSubscription, Grace period: $_isInGracePeriod',
@@ -935,6 +1055,10 @@ class SubscriptionService {
       AppLogger.log('Error saving subscription status: $e');
       // Fallback to unencrypted storage
       _storage.write(_subscriptionStatusKey, _hasActiveSubscription);
+      // Still notify listeners even in error case
+      _subscriptionStatusController.add(
+        _hasActiveSubscription || _isInGracePeriod,
+      );
     }
   }
 
@@ -1007,11 +1131,11 @@ class SubscriptionService {
   Future<void> checkSubscriptionExpiration() async {
     try {
       AppLogger.log('Checking subscription expiration...');
-      
+
       // Check grace period expiry first
       if (_isInGracePeriod && _gracePeriodStart != null) {
         final gracePeriodEnd = _gracePeriodStart!.add(_gracePeriodDuration);
-        
+
         if (DateTime.now().isAfter(gracePeriodEnd)) {
           AppLogger.log('Grace period expired at: $gracePeriodEnd');
           _clearGracePeriod();
@@ -1022,15 +1146,16 @@ class SubscriptionService {
           _showGracePeriodExpiryWarning();
         }
       }
-      
+
       if (_hasActiveSubscription) {
         // Check local expiry first for immediate response
-        if (_subscriptionExpiry != null && DateTime.now().isAfter(_subscriptionExpiry!)) {
+        if (_subscriptionExpiry != null &&
+            DateTime.now().isAfter(_subscriptionExpiry!)) {
           AppLogger.log('Local subscription expired at: $_subscriptionExpiry');
           await _handleSubscriptionExpiry();
           return;
         }
-        
+
         // Validate with backend for accuracy
         await _validateSubscriptionWithBackend();
 
@@ -1043,24 +1168,24 @@ class SubscriptionService {
       AppLogger.log('Error checking subscription expiration: $e');
     }
   }
-  
+
   /// Handle subscription expiry with grace period management
   Future<void> _handleSubscriptionExpiry() async {
     final wasSubscribed = _hasActiveSubscription;
     _hasActiveSubscription = false;
     _subscriptionExpiry = null;
-    
+
     // Start grace period if not already in one
     if (!_isInGracePeriod && wasSubscribed) {
       _startGracePeriod();
     }
-    
+
     // Save updated status
     _saveSubscriptionStatus();
-    
+
     // Notify listeners - subscription status includes grace period
     _subscriptionStatusController.add(hasActiveSubscription);
-    
+
     // Clear Firebase cache
     final user = _auth.currentUser;
     if (user != null) {
@@ -1068,127 +1193,131 @@ class SubscriptionService {
       await cacheService.invalidateCache('subscription_${user.uid}');
       await cacheService.invalidateCache('active_subscription_${user.uid}');
     }
-    
+
     AppLogger.log('Subscription expiry handled with grace period management');
-   }
-   
-   /// Start grace period when subscription expires
-   void _startGracePeriod() {
-     _gracePeriodStart = DateTime.now();
-     _isInGracePeriod = true;
-     _gracePeriodNotified = false; // Reset notification flag for new grace period
-     
-     // Save grace period state
-     _storage.write(_gracePeriodStartKey, _gracePeriodStart!.millisecondsSinceEpoch);
-     _storage.write(_gracePeriodNotifiedKey, false);
-     
-     AppLogger.log('Grace period started: $_gracePeriodStart');
-     
-     // Show grace period notification
-     _showGracePeriodNotification();
-   }
-   
-   /// Clear grace period state
-   void _clearGracePeriod() {
-     _gracePeriodStart = null;
-     _isInGracePeriod = false;
-     _gracePeriodNotified = false;
-     
-     // Clear grace period storage
-     _storage.remove(_gracePeriodStartKey);
-     _storage.remove(_gracePeriodNotifiedKey);
-     
-     AppLogger.log('Grace period cleared');
-   }
-   
-   /// Check if grace period is about to expire (within 24 hours)
-   bool get isGracePeriodExpiringSoon {
-     if (!_isInGracePeriod || _gracePeriodStart == null) return false;
-     
-     final gracePeriodEnd = _gracePeriodStart!.add(_gracePeriodDuration);
-     final timeUntilExpiry = gracePeriodEnd.difference(DateTime.now());
-     
-     return timeUntilExpiry.inHours <= 24;
-   }
-   
-   /// Show grace period notification
-   void _showGracePeriodNotification() {
-     if (_gracePeriodNotified) return;
-     
-     final gracePeriodEnd = _gracePeriodStart?.add(_gracePeriodDuration);
-     final daysLeft = gracePeriodEnd?.difference(DateTime.now()).inDays ?? 0;
-     
-     Get.snackbar(
-       'Subscription Expired - Grace Period Active',
-       'Your subscription has expired but you have $daysLeft days of grace period remaining. Renew now to avoid losing access.',
-       snackPosition: SnackPosition.TOP,
-       backgroundColor: Get.theme.colorScheme.tertiary,
-       colorText: Get.theme.colorScheme.onTertiary,
-       duration: const Duration(seconds: 6),
-       isDismissible: true,
-       mainButton: TextButton(
-         onPressed: () {
-           Get.back();
-           Get.toNamed('/subscription');
-         },
-         child: Text(
-           'Renew Now',
-           style: TextStyle(color: Get.theme.colorScheme.onTertiary),
-         ),
-       ),
-     );
-     
-     _gracePeriodNotified = true;
-     _saveSubscriptionStatus();
-   }
-   
-   /// Show grace period expiry warning
-   void _showGracePeriodExpiryWarning() {
-     final hasNotified = _storage.read(_gracePeriodNotifiedKey) ?? false;
-     if (hasNotified) return;
-     
-     final gracePeriodEnd = _gracePeriodStart?.add(_gracePeriodDuration);
-     final hoursLeft = gracePeriodEnd?.difference(DateTime.now()).inHours ?? 0;
-     
-     Get.snackbar(
-       'Grace Period Ending Soon',
-       'Your grace period expires in $hoursLeft hours. Renew your subscription now to avoid losing access to premium features.',
-       snackPosition: SnackPosition.TOP,
-       backgroundColor: Get.theme.colorScheme.error,
-       colorText: Get.theme.colorScheme.onError,
-       duration: const Duration(seconds: 8),
-       isDismissible: true,
-       mainButton: TextButton(
-         onPressed: () {
-           Get.back();
-           Get.toNamed('/subscription');
-         },
-         child: Text(
-           'Renew Now',
-           style: TextStyle(color: Get.theme.colorScheme.onError),
-         ),
-       ),
-     );
-     
-     // Mark as notified
-     _storage.write(_gracePeriodNotifiedKey, true);
-   }
+  }
 
-   /// Schedule periodic expiry checking
-   void _schedulePeriodicExpiryCheck() {
-     _expiryCheckTimer?.cancel();
-     
-     if (_hasActiveSubscription) {
-       _expiryCheckTimer = Timer.periodic(_expiryCheckInterval, (timer) {
-         checkSubscriptionExpiration();
-       });
-       AppLogger.log('Scheduled periodic expiry checking every ${_expiryCheckInterval.inMinutes} minutes');
-     }
-   }
-   
+  /// Start grace period when subscription expires
+  void _startGracePeriod() {
+    _gracePeriodStart = DateTime.now();
+    _isInGracePeriod = true;
+    _gracePeriodNotified =
+        false; // Reset notification flag for new grace period
 
-   
-   /// Show subscription expired notification
+    // Save grace period state
+    _storage.write(
+      _gracePeriodStartKey,
+      _gracePeriodStart!.millisecondsSinceEpoch,
+    );
+    _storage.write(_gracePeriodNotifiedKey, false);
+
+    AppLogger.log('Grace period started: $_gracePeriodStart');
+
+    // Show grace period notification
+    _showGracePeriodNotification();
+  }
+
+  /// Clear grace period state
+  void _clearGracePeriod() {
+    _gracePeriodStart = null;
+    _isInGracePeriod = false;
+    _gracePeriodNotified = false;
+
+    // Clear grace period storage
+    _storage.remove(_gracePeriodStartKey);
+    _storage.remove(_gracePeriodNotifiedKey);
+
+    AppLogger.log('Grace period cleared');
+  }
+
+  /// Check if grace period is about to expire (within 24 hours)
+  bool get isGracePeriodExpiringSoon {
+    if (!_isInGracePeriod || _gracePeriodStart == null) return false;
+
+    final gracePeriodEnd = _gracePeriodStart!.add(_gracePeriodDuration);
+    final timeUntilExpiry = gracePeriodEnd.difference(DateTime.now());
+
+    return timeUntilExpiry.inHours <= 24;
+  }
+
+  /// Show grace period notification
+  void _showGracePeriodNotification() {
+    if (_gracePeriodNotified) return;
+
+    final gracePeriodEnd = _gracePeriodStart?.add(_gracePeriodDuration);
+    final daysLeft = gracePeriodEnd?.difference(DateTime.now()).inDays ?? 0;
+
+    Get.snackbar(
+      'Subscription Expired - Grace Period Active',
+      'Your subscription has expired but you have $daysLeft days of grace period remaining. Renew now to avoid losing access.',
+      snackPosition: SnackPosition.TOP,
+      backgroundColor: Get.theme.colorScheme.tertiary,
+      colorText: Get.theme.colorScheme.onTertiary,
+      duration: const Duration(seconds: 6),
+      isDismissible: true,
+      mainButton: TextButton(
+        onPressed: () {
+          Get.back();
+          Get.toNamed('/subscription');
+        },
+        child: Text(
+          'Renew Now',
+          style: TextStyle(color: Get.theme.colorScheme.onTertiary),
+        ),
+      ),
+    );
+
+    _gracePeriodNotified = true;
+    _saveSubscriptionStatus();
+  }
+
+  /// Show grace period expiry warning
+  void _showGracePeriodExpiryWarning() {
+    final hasNotified = _storage.read(_gracePeriodNotifiedKey) ?? false;
+    if (hasNotified) return;
+
+    final gracePeriodEnd = _gracePeriodStart?.add(_gracePeriodDuration);
+    final hoursLeft = gracePeriodEnd?.difference(DateTime.now()).inHours ?? 0;
+
+    Get.snackbar(
+      'Grace Period Ending Soon',
+      'Your grace period expires in $hoursLeft hours. Renew your subscription now to avoid losing access to premium features.',
+      snackPosition: SnackPosition.TOP,
+      backgroundColor: Get.theme.colorScheme.error,
+      colorText: Get.theme.colorScheme.onError,
+      duration: const Duration(seconds: 8),
+      isDismissible: true,
+      mainButton: TextButton(
+        onPressed: () {
+          Get.back();
+          Get.toNamed('/subscription');
+        },
+        child: Text(
+          'Renew Now',
+          style: TextStyle(color: Get.theme.colorScheme.onError),
+        ),
+      ),
+    );
+
+    // Mark as notified
+    _storage.write(_gracePeriodNotifiedKey, true);
+  }
+
+  /// Schedule periodic expiry checking
+  void _schedulePeriodicExpiryCheck() {
+    _expiryCheckTimer?.cancel();
+
+    if (_hasActiveSubscription) {
+      _expiryCheckTimer = Timer.periodic(_expiryCheckInterval, (timer) {
+        checkSubscriptionExpiration();
+      });
+      AppLogger.log(
+        'Scheduled periodic expiry checking every ${_expiryCheckInterval.inMinutes} minutes',
+      );
+    }
+  }
+
+  /// Show subscription expired notification
   void _showSubscriptionExpiredNotification() {
     Get.snackbar(
       'Subscription Expired',
@@ -1240,16 +1369,14 @@ class SubscriptionService {
       return false;
     } catch (e) {
       AppLogger.log('Network check failed: $e');
-      
+
       // Handle network error with error handler
       await _errorHandler.handleSubscriptionError(
         errorType: 'network_error',
         errorMessage: e.toString(),
-        context: {
-          'operation': 'network_connectivity_check',
-        },
+        context: {'operation': 'network_connectivity_check'},
       );
-      
+
       return false;
     }
   }
@@ -1261,14 +1388,12 @@ class SubscriptionService {
       await initialize();
     } catch (e) {
       AppLogger.log('Service degradation handling failed: $e');
-      
+
       // Handle service degradation error with error handler
       await _errorHandler.handleSubscriptionError(
         errorType: 'service_unavailable',
         errorMessage: e.toString(),
-        context: {
-          'operation': 'service_degradation_handling',
-        },
+        context: {'operation': 'service_degradation_handling'},
       );
 
       // Inform user about limited functionality
@@ -1334,7 +1459,7 @@ class SubscriptionService {
       }
     } catch (e) {
       AppLogger.log('Error validating platform payment: $e');
-      
+
       // Handle platform payment validation error with error handler
       await _errorHandler.handleSubscriptionError(
         errorType: 'payment_error',

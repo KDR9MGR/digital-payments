@@ -60,7 +60,9 @@ class SubscriptionScreen extends StatelessWidget {
       padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width - (Dimensions.defaultPaddingSize * 2),
+          maxWidth:
+              MediaQuery.of(context).size.width -
+              (Dimensions.defaultPaddingSize * 2),
         ),
         child: Column(
           children: [
@@ -88,7 +90,7 @@ class SubscriptionScreen extends StatelessWidget {
         String statusTitle;
         String statusSubtitle;
         IconData statusIcon;
-        
+
         if (hasActive) {
           statusColor = Colors.green;
           statusTitle = 'Premium Active';
@@ -100,7 +102,7 @@ class SubscriptionScreen extends StatelessWidget {
           statusSubtitle = 'Upgrade to unlock premium features';
           statusIcon = Icons.info_outline;
         }
-        
+
         return Container(
           padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
           decoration: BoxDecoration(
@@ -113,10 +115,7 @@ class SubscriptionScreen extends StatelessWidget {
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(Dimensions.radius * 2),
-            border: Border.all(
-              color: statusColor,
-              width: 1,
-            ),
+            border: Border.all(color: statusColor, width: 1),
           ),
           child: Row(
             children: [
@@ -145,10 +144,7 @@ class SubscriptionScreen extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: Dimensions.heightSize * 0.3),
-                    Text(
-                      statusSubtitle,
-                      style: CustomStyle.commonSubTextTitle,
-                    ),
+                    Text(statusSubtitle, style: CustomStyle.commonSubTextTitle),
                   ],
                 ),
               ),

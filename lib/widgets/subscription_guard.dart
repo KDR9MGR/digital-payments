@@ -60,39 +60,73 @@ class _SubscriptionGuardState extends State<SubscriptionGuard> {
   }
 
   Future<void> _checkSubscriptionStatus() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
-      AppLogger.log('SubscriptionGuard: Checking subscription status...');
+      // CRITICAL FIX: Check cached status first for immediate response
+      final cachedStatus = _subscriptionService.hasActiveSubscription;
+      final controllerStatus = _subscriptionController.hasActiveSubscription;
       
-      // Always check with the subscription service for the most accurate status
-      final serviceHasSubscription = await _subscriptionService.isUserSubscribed(forceRefresh: true);
-      final controllerHasSubscription = _subscriptionController.hasActiveSubscription;
+      AppLogger.log(
+        'SubscriptionGuard: Cached service status: $cachedStatus, Controller status: $controllerStatus',
+      );
       
-      // Use the service status as the source of truth, but also check controller
-      final hasValidSubscription = serviceHasSubscription || controllerHasSubscription;
-      
-      if (mounted) {
-        setState(() {
-          _hasSubscription = hasValidSubscription;
-          _isLoading = false;
-        });
-      }
-      
-      // If there's a mismatch, force controller to refresh
-      if (serviceHasSubscription != controllerHasSubscription) {
-        AppLogger.log('SubscriptionGuard: Status mismatch detected. Service: $serviceHasSubscription, Controller: $controllerHasSubscription. Refreshing controller...');
-        await _subscriptionController.refreshData();
+      // If both cached sources agree on active subscription, use it immediately
+      if (cachedStatus && controllerStatus) {
+        _hasSubscription = true;
+        AppLogger.log('SubscriptionGuard: Both sources confirm active subscription, proceeding immediately');
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
       }
 
+      // Check subscription status with force refresh for accuracy
+      final serviceStatus = await _subscriptionService.isUserSubscribed(
+        forceRefresh: true,
+      );
+      
+      // Re-check controller status after service refresh
+      final updatedControllerStatus = _subscriptionController.hasActiveSubscription;
+
       AppLogger.log(
-        'SubscriptionGuard: Check completed. Service: $serviceHasSubscription, Controller: $controllerHasSubscription, Final: $hasValidSubscription',
+        'SubscriptionGuard: Service status after refresh: $serviceStatus, Updated controller status: $updatedControllerStatus',
+      );
+
+      // If there's still a mismatch, force controller to refresh
+      if (serviceStatus != updatedControllerStatus) {
+        AppLogger.log(
+          'SubscriptionGuard: Status mismatch detected, forcing controller refresh',
+        );
+        await _subscriptionController.refreshData();
+        
+        // Give a moment for the controller to update
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      _hasSubscription = serviceStatus;
+
+      AppLogger.log(
+        'SubscriptionGuard: Final subscription status: $_hasSubscription',
       );
     } catch (e) {
-      AppLogger.log('SubscriptionGuard: Error checking subscription status: $e');
-      
-      // On error, use controller status as fallback but don't block the user
+      AppLogger.log(
+        'SubscriptionGuard: Error checking subscription status: $e',
+      );
+      // CRITICAL FIX: Don't assume false on error - check cached status
+      _hasSubscription = _subscriptionService.hasActiveSubscription || _subscriptionController.hasActiveSubscription;
+      AppLogger.log(
+        'SubscriptionGuard: Using cached status due to error: $_hasSubscription',
+      );
+    } finally {
       if (mounted) {
         setState(() {
-          _hasSubscription = _subscriptionController.hasActiveSubscription;
           _isLoading = false;
         });
       }

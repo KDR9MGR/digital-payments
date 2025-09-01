@@ -75,6 +75,9 @@ class SubscriptionErrorHandler {
         case 'auth_error':
           return await _handleAuthenticationError(errorMessage, context);
 
+        case 'initialization_error':
+          return await _handleInitializationError(errorMessage, context);
+
         default:
           return await _handleGenericError(errorType, errorMessage, context);
       }
@@ -228,6 +231,20 @@ class SubscriptionErrorHandler {
       'Authentication Required',
       'Please sign in again to continue using premium features.',
     );
+
+    return false;
+  }
+
+  /// Handle initialization errors
+  Future<bool> _handleInitializationError(
+    String errorMessage,
+    Map<String, dynamic>? context,
+  ) async {
+    AppLogger.log('Handling initialization error: $errorMessage');
+
+    // Don't show error dialog for initialization errors during app startup
+    // Just log the error and continue - the app will work in limited mode
+    AppLogger.log('Subscription service initialization failed - continuing in limited mode');
 
     return false;
   }

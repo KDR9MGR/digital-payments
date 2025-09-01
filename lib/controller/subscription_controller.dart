@@ -621,6 +621,34 @@ class SubscriptionController extends GetxController {
     await _initializeSubscriptionData();
   }
 
+  /// Force refresh subscription status - called when subscription state changes
+  Future<void> refreshSubscriptionStatus() async {
+    try {
+      AppLogger.log('SubscriptionController: Force refreshing subscription status...');
+      
+      // Force refresh from subscription service
+      final serviceStatus = await _subscriptionService.isUserSubscribed(forceRefresh: true);
+      
+      // Update local state immediately
+      _hasActiveSubscription.value = serviceStatus;
+      _subscriptionStatus.value = serviceStatus ? 'active' : 'inactive';
+      
+      if (serviceStatus) {
+        _currentPlan.value = singlePlanId;
+        AppLogger.log('SubscriptionController: Subscription status refreshed - ACTIVE');
+      } else {
+        _currentPlan.value = '';
+        AppLogger.log('SubscriptionController: Subscription status refreshed - INACTIVE');
+      }
+      
+      // Also refresh full subscription data to ensure consistency
+      await _checkSubscriptionStatus();
+      
+    } catch (e) {
+      AppLogger.log('SubscriptionController: Error refreshing subscription status: $e');
+    }
+  }
+
   // Process Google Pay subscription
   Future<void> processGooglePaySubscription() async {
     // Check if user already has active subscription
@@ -695,24 +723,45 @@ class SubscriptionController extends GetxController {
   // Validate payment status after returning from Play Store
   Future<void> validatePaymentStatus() async {
     try {
+      _isLoading.value = true;
       AppLogger.log('Validating payment status after Play Store redirect');
 
-      // Force refresh subscription status
+      // Force refresh to get the latest status
+      final hasSubscription = await _subscriptionService.isUserSubscribed(
+        forceRefresh: true,
+      );
+
+      // Also check our internal status
       await _checkSubscriptionStatus();
 
       // If user now has active subscription, show success message
-      if (_hasActiveSubscription.value) {
+      if (hasSubscription || _hasActiveSubscription.value) {
         Get.snackbar(
           'Success',
           'Welcome to Super Payments! Your subscription is now active. 🎉',
           duration: Duration(seconds: 5),
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
         );
 
         // Refresh all subscription data
         await _initializeSubscriptionData();
+
+        // Close any open paywall screens
+        if (Get.isDialogOpen == true) {
+          Get.back();
+        }
+
+        // Navigate back if we're on a paywall screen
+        if (Get.currentRoute.contains('paywall') ||
+            Get.currentRoute.contains('subscription')) {
+          Get.back();
+        }
       }
     } catch (e) {
       AppLogger.log('Error validating payment status: $e');
+    } finally {
+      _isLoading.value = false;
     }
   }
 

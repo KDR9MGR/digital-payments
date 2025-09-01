@@ -16,6 +16,7 @@ import 'package:xpay/views/welcome_screen.dart';
 import 'package:xpay/views/withdraw/withdraw_money_screen.dart';
 import 'package:xpay/views/subscription/subscription_screen.dart';
 import 'package:xpay/views/subscription/subscription_plans_screen.dart';
+import 'package:xpay/views/subscription/unified_subscription_screen.dart';
 
 import '../binding/splash_binding.dart';
 import '../views/add_money/add_money_screen.dart';
@@ -261,6 +262,7 @@ class Routes {
 
   // Subscription routes
   static const String subscriptionScreen = '/subscriptionScreen';
+  static const String unifiedSubscriptionScreen = '/unifiedSubscriptionScreen';
   static const String subscriptionPlansScreen = '/subscriptionPlansScreen';
   static const String errorDebugScreen = '/errorDebugScreen';
 
@@ -389,15 +391,16 @@ class Routes {
     GetPage(name: bankInfoScreen, page: () => const BankInfoScreen()),
     GetPage(
       name: Routes.subscriptionScreen,
-      page: () => const SubscriptionScreen(),
+      page: () => const UnifiedSubscriptionScreen(),
+    ),
+    GetPage(
+      name: Routes.unifiedSubscriptionScreen,
+      page: () => const UnifiedSubscriptionScreen(),
     ),
     GetPage(
       name: Routes.subscriptionPlansScreen,
       page: () => const SubscriptionPlansScreen(),
     ),
-    GetPage(
-      name: Routes.errorDebugScreen,
-      page: () => ErrorDebugScreen(),
-    ),
+    GetPage(name: Routes.errorDebugScreen, page: () => ErrorDebugScreen()),
   ];
 }
