@@ -4,6 +4,8 @@ const axios = require('axios');
 const { google } = require('googleapis');
 const crypto = require('crypto');
 const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -198,11 +200,11 @@ async function handleAccountCreated(event) {
     
     // Store account info in Firestore if needed
     if (accountData.foreignId) {
-      await db.collection('users').doc(accountData.foreignId).update({
+      await db.collection('users').doc(accountData.foreignId).set({
         moovAccountId: accountData.accountID,
         moovAccountStatus: accountData.status,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
     }
   } catch (error) {
     console.error('Error handling account created:', error);
@@ -337,48 +339,145 @@ exports.validateGooglePlayPurchase = functions.https.onCall(async (data, context
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
-  const { purchaseToken, productId, packageName } = data;
+  const { purchaseToken, productId, packageName, subscriptionId } = data;
   const userId = context.auth.uid;
+  const effectiveProductId = productId || subscriptionId; // support both naming conventions
+
+  // Validate input parameters
+  if (!purchaseToken || !effectiveProductId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters: purchaseToken and productId/subscriptionId');
+  }
 
   try {
-    // Validate purchase with Google Play Store API
-    // Note: You'll need to set up Google Play Developer API credentials
-    // For now, we'll create the subscription record assuming validation passes
+    console.log(`Validating Google Play purchase for user ${userId}, product ${effectiveProductId}`);
     
+    // Check for duplicate purchase token
+    const existingPurchase = await db.collection('subscriptions')
+      .where('purchaseToken', '==', purchaseToken)
+      .where('userId', '==', userId)
+      .limit(1)
+      .get();
+    
+    if (!existingPurchase.empty) {
+      console.log(`Duplicate purchase token detected: ${purchaseToken}`);
+      const existingDoc = existingPurchase.docs[0];
+      const existingData = existingDoc.data();
+      
+      return {
+        success: true,
+        subscriptionId: existingDoc.id,
+        expiryDate: existingData.expiryDate.toDate().toISOString(),
+        message: 'Purchase already validated',
+        isDuplicate: true
+      };
+    }
+
+    // Initialize Google Play Developer API using googleapis
+    const auth = new google.auth.GoogleAuth({
+      credentials: GOOGLE_PLAY_SERVICE_ACCOUNT,
+      scopes: ['https://www.googleapis.com/auth/androidpublisher']
+    });
+    
+    const androidPublisher = google.androidpublisher({ version: 'v3', auth });
+    
+    // Call purchases.subscriptions.get as requested
+    const response = await androidPublisher.purchases.subscriptions.get({
+      packageName: packageName || GOOGLE_PLAY_PACKAGE_NAME,
+      subscriptionId: effectiveProductId,
+      token: purchaseToken
+    });
+    
+    const purchase = response.data;
+    console.log(`Google Play API response:`, {
+      paymentState: purchase.paymentState,
+      autoRenewing: purchase.autoRenewing,
+      expiryTimeMillis: purchase.expiryTimeMillis,
+      orderId: purchase.orderId
+    });
+    
+    // Validate purchase state (0 = pending, 1 = confirmed, 2 = grace period)
+    if (purchase.paymentState !== 1 && purchase.paymentState !== 2) {
+      throw new functions.https.HttpsError('failed-precondition', 'Purchase not confirmed');
+    }
+    
+    // Check expiry
+    const expiryDate = new Date(parseInt(purchase.expiryTimeMillis));
+    if (expiryDate <= new Date()) {
+      throw new functions.https.HttpsError('failed-precondition', 'Subscription has expired');
+    }
+    
+    // Determine product details (simplified for example)
+    let planType = 'basic_monthly';
+    let amount = 1.99;
+    
+    if (effectiveProductId.includes('premium')) {
+      planType = 'premium_monthly';
+      amount = 9.99;
+    } else if (effectiveProductId.includes('super')) {
+      planType = 'super_payments_monthly';
+      amount = 1.99;
+    }
+
     const subscriptionData = {
       userId: userId,
-      planType: 'super_payments_monthly',
+      planType: planType,
       status: 'active',
       paymentMethod: 'google_play',
-      amount: 1.99,
+      amount: amount,
       currency: 'USD',
       purchaseToken: purchaseToken,
-      productId: productId,
-      packageName: packageName,
+      productId: effectiveProductId,
+      packageName: packageName || GOOGLE_PLAY_PACKAGE_NAME,
+      googlePlayOrderId: purchase.orderId,
+      autoRenewing: purchase.autoRenewing,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      lastPaymentDate: admin.firestore.FieldValue.serverTimestamp()
+      expiryDate: expiryDate,
+      lastPaymentDate: admin.firestore.FieldValue.serverTimestamp(),
+      validatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
     // Create subscription record
     const subscriptionRef = await db.collection('subscriptions').add(subscriptionData);
+    console.log(`Created subscription record: ${subscriptionRef.id}`);
 
-    // Update user document
-    await db.collection('users').doc(userId).update({
+    // Update user document with isSubscribed: true and expiry as requested (create if doesn't exist)
+    await db.collection('users').doc(userId).set({
       isSubscribed: true,
+      expiry: expiryDate,
       subscriptionId: subscriptionRef.id,
       subscriptionStatus: 'active',
+      subscriptionExpiryDate: expiryDate,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
+    
+    console.log(`Successfully validated Google Play purchase for user ${userId}`);
 
     return {
       success: true,
       subscriptionId: subscriptionRef.id,
-      message: 'Google Play subscription validated successfully'
+      expiryDate: expiryDate.toISOString(),
+      message: 'Google Play subscription validated successfully',
+      autoRenewing: purchase.autoRenewing,
+      orderId: purchase.orderId,
+      purchase: purchase
     };
+    
   } catch (error) {
     console.error('Error validating Google Play purchase:', error);
-    throw new functions.https.HttpsError('internal', 'Failed to validate Google Play purchase');
+    
+    // Handle specific Google Play API errors
+    if (error.code === 410) {
+      throw new functions.https.HttpsError('not-found', 'Purchase token not found or expired');
+    } else if (error.code === 400) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid purchase token or product ID');
+    } else if (error.code === 401) {
+      throw new functions.https.HttpsError('permission-denied', 'Google Play API authentication failed');
+    } else if (error.message && error.message.includes('HttpsError')) {
+      // Re-throw our custom errors
+      throw error;
+    } else {
+      throw new functions.https.HttpsError('internal', 'Failed to validate Google Play purchase');
+    }
   }
 });
 
@@ -414,13 +513,13 @@ exports.validateApplePayPurchase = functions.https.onCall(async (data, context) 
     // Create subscription record
     const subscriptionRef = await db.collection('subscriptions').add(subscriptionData);
 
-    // Update user document
-    await db.collection('users').doc(userId).update({
+    // Update user document (create if doesn't exist)
+    await db.collection('users').doc(userId).set({
       isSubscribed: true,
       subscriptionId: subscriptionRef.id,
       subscriptionStatus: 'active',
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
 
     return {
       success: true,
@@ -518,13 +617,13 @@ exports.validatePlatformPayment = functions.https.onCall(async (data, context) =
     }
     
     // Update user document
-    await db.collection('users').doc(userId).update({
+    await db.collection('users').doc(userId).set({
       isSubscribed: true,
       subscriptionId: subscriptionRef.id,
       subscriptionStatus: 'active',
       lastPaymentMethod: paymentMethod,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
     
     console.log(`Platform payment validated successfully for user ${userId}`);
     
@@ -601,10 +700,10 @@ exports.createMoovAccount = functions.https.onCall(async (data, context) => {
     const accountId = response.data.accountID;
 
     // Save account ID to Firestore
-    await db.collection('users').doc(userId).update({
+    await db.collection('users').doc(userId).set({
       moovAccountId: accountId,
       moovAccountStatus: response.data.status,
-    });
+    }, { merge: true });
 
     return { accountId: accountId };
   } catch (error) {
@@ -661,18 +760,30 @@ exports.processMoovSubscription = functions.https.onCall(async (data, context) =
 
 // Configuration
 const GOOGLE_PLAY_PACKAGE_NAME = functions.config().googleplay?.package_name || 'com.yourapp.package';
-const GOOGLE_PLAY_SERVICE_ACCOUNT = {
-  type: "service_account",
-  project_id: functions.config().googleplay?.project_id || "your-project-id",
-  private_key_id: functions.config().googleplay?.private_key_id || "your-private-key-id",
-  private_key: functions.config().googleplay?.private_key?.replace(/\\n/g, '\n') || "-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY\n-----END PRIVATE KEY-----\n",
-  client_email: functions.config().googleplay?.client_email || "your-service-account@your-project.iam.gserviceaccount.com",
-  client_id: functions.config().googleplay?.client_id || "your-client-id",
-  auth_uri: "https://accounts.google.com/o/oauth2/auth",
-  token_uri: "https://oauth2.googleapis.com/token",
-  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-  client_x509_cert_url: functions.config().googleplay?.client_x509_cert_url || "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project.iam.gserviceaccount.com"
-};
+const SERVICE_ACCOUNT_FILE = path.join(__dirname, 'google-play-service-account.json');
+let GOOGLE_PLAY_SERVICE_ACCOUNT;
+if (fs.existsSync(SERVICE_ACCOUNT_FILE)) {
+  try {
+    GOOGLE_PLAY_SERVICE_ACCOUNT = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT_FILE, 'utf8'));
+    console.log('Loaded Google Play service account from file');
+  } catch (e) {
+    console.error('Failed to parse Google Play service account JSON file:', e);
+    throw new Error('Invalid Google Play service account file.');
+  }
+} else {
+  GOOGLE_PLAY_SERVICE_ACCOUNT = {
+    type: "service_account",
+    project_id: functions.config().googleplay?.project_id || "your-project-id",
+    private_key_id: functions.config().googleplay?.private_key_id || "your-private-key-id",
+    private_key: functions.config().googleplay?.private_key?.replace(/\\n/g, '\n') || "-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY\n-----END PRIVATE KEY-----\n",
+    client_email: functions.config().googleplay?.client_email || "your-service-account@your-project.iam.gserviceaccount.com",
+    client_id: functions.config().googleplay?.client_id || "your-client-id",
+    auth_uri: "https://accounts.google.com/o/oauth2/auth",
+    token_uri: "https://oauth2.googleapis.com/token",
+    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+    client_x509_cert_url: functions.config().googleplay?.client_x509_cert_url || "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project.iam.gserviceaccount.com"
+  };
+}
 const APPLE_SHARED_SECRET = functions.config().apple?.shared_secret || 'your_apple_shared_secret';
 const APPLE_BUNDLE_ID = functions.config().apple?.bundle_id || 'com.yourapp.bundle';
 
@@ -999,14 +1110,14 @@ exports.validateGooglePlayPurchaseReal = functions.https.onCall(async (data, con
     const subscriptionRef = await db.collection('subscriptions').add(subscriptionData);
     console.log(`Created subscription record: ${subscriptionRef.id}`);
 
-    // Update user document
-    await db.collection('users').doc(userId).update({
+    // Update user document (create if doesn't exist)
+    await db.collection('users').doc(userId).set({
       isSubscribed: true,
       subscriptionId: subscriptionRef.id,
       subscriptionStatus: 'active',
       subscriptionExpiryDate: expiryDate,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
     
     console.log(`Successfully validated Google Play purchase for user ${userId}`);
 
@@ -1121,14 +1232,14 @@ exports.validateApplePayPurchaseReal = functions.https.onCall(async (data, conte
     const subscriptionRef = await db.collection('subscriptions').add(subscriptionData);
     console.log('Apple subscription stored with ID:', subscriptionRef.id);
 
-    // Update user document
-    await db.collection('users').doc(userId).update({
+    // Update user document (create if doesn't exist)
+    await db.collection('users').doc(userId).set({
       hasActiveSubscription: true,
       subscriptionPlatform: 'apple',
       subscriptionExpiryDate: expiryDate,
       subscriptionId: subscriptionRef.id,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
 
     console.log('User document updated for Apple subscription');
 
@@ -1305,11 +1416,11 @@ exports.cancelSubscription = functions.https.onCall(async (data, context) => {
     });
     
     // Update user document
-    await db.collection('users').doc(userId).update({
+    await db.collection('users').doc(userId).set({
       isSubscribed: false,
       subscriptionStatus: 'cancelled',
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
     
     // Log cancellation event
     await db.collection('subscription_events').add({
@@ -1731,11 +1842,11 @@ async function handleAppleCancellation(notification) {
       // Update user document
       const subscription = subscriptionDoc.data();
       if (subscription.userId) {
-        await db.collection('users').doc(subscription.userId).update({
+        await db.collection('users').doc(subscription.userId).set({
           isSubscribed: false,
           subscriptionStatus: 'cancelled',
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
       }
       
       // Log the event
@@ -1784,11 +1895,11 @@ async function handleAppleRefund(notification) {
       // Update user document
       const subscription = subscriptionDoc.data();
       if (subscription.userId) {
-        await db.collection('users').doc(subscription.userId).update({
+        await db.collection('users').doc(subscription.userId).set({
           isSubscribed: false,
           subscriptionStatus: 'refunded',
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
       }
       
       // Log the event

@@ -48,7 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
     _animationController.forward();
   }
-  
+
   // Removed automatic subscription verification - features will check individually
 
   @override
@@ -224,7 +224,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                                     children: [
                                       Flexible(
                                         child: Text(
-                                          userProvider.user?.firstName ?? 'User',
+                                          userProvider.user?.firstName ??
+                                              'User',
                                           style: TextStyle(
                                             color: Colors.white,
                                             fontSize: 20,
@@ -233,7 +234,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                                           ),
                                         ),
                                       ),
-                                      if (subscriptionController.hasActiveSubscription) ...[
+                                      if (subscriptionController
+                                          .hasActiveSubscription) ...[
                                         SizedBox(width: 8),
                                         Container(
                                           padding: EdgeInsets.symmetric(
@@ -243,18 +245,28 @@ class _DashboardScreenState extends State<DashboardScreen>
                                           decoration: BoxDecoration(
                                             gradient: LinearGradient(
                                               colors: [
-                                                Colors.amber.withValues(alpha: 0.9),
-                                                Colors.orange.withValues(alpha: 0.8),
+                                                Colors.amber.withValues(
+                                                  alpha: 0.9,
+                                                ),
+                                                Colors.orange.withValues(
+                                                  alpha: 0.8,
+                                                ),
                                               ],
                                             ),
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                             border: Border.all(
-                                              color: Colors.white.withValues(alpha: 0.3),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.3,
+                                              ),
                                               width: 1,
                                             ),
                                             boxShadow: [
                                               BoxShadow(
-                                                color: Colors.amber.withValues(alpha: 0.3),
+                                                color: Colors.amber.withValues(
+                                                  alpha: 0.3,
+                                                ),
                                                 blurRadius: 6,
                                                 offset: Offset(0, 2),
                                               ),
@@ -398,7 +410,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                   subtitle: 'Manage cards',
                   color: CustomColor.warningColor,
                   onTap: () {
-                    Get.toNamed(Routes.myCardsScreen);
+                    final subscriptionController =
+                        Get.find<SubscriptionController>();
+                    if (subscriptionController.hasActiveSubscription) {
+                      Get.toNamed(Routes.myCardsScreen);
+                    } else {
+                      Get.to(
+                        () => const PaywallScreen(),
+                        fullscreenDialog: true,
+                        transition: Transition.cupertino,
+                      );
+                    }
                   },
                 ),
               ),
@@ -411,7 +433,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                   subtitle: 'Save bank details',
                   color: Colors.purple,
                   onTap: () {
-                    Get.toNamed(Routes.bankInfoScreen);
+                    final subscriptionController =
+                        Get.find<SubscriptionController>();
+                    if (subscriptionController.hasActiveSubscription) {
+                      Get.toNamed(Routes.bankInfoScreen);
+                    } else {
+                      Get.to(
+                        () => const PaywallScreen(),
+                        fullscreenDialog: true,
+                        transition: Transition.cupertino,
+                      );
+                    }
                   },
                 ),
               ),
@@ -875,15 +907,16 @@ class _DashboardScreenState extends State<DashboardScreen>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: hasSubscription
-                    ? [
-                        CustomColor.successColor.withValues(alpha: 0.8),
-                        CustomColor.successColor.withValues(alpha: 0.6),
-                      ]
-                    : [
-                        CustomColor.primaryColor.withValues(alpha: 0.8),
-                        CustomColor.primaryColor.withValues(alpha: 0.6),
-                      ],
+                colors:
+                    hasSubscription
+                        ? [
+                          CustomColor.successColor.withValues(alpha: 0.8),
+                          CustomColor.successColor.withValues(alpha: 0.6),
+                        ]
+                        : [
+                          CustomColor.primaryColor.withValues(alpha: 0.8),
+                          CustomColor.primaryColor.withValues(alpha: 0.6),
+                        ],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
@@ -951,7 +984,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.2),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(

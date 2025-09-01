@@ -13,7 +13,8 @@ import 'purchase_validation_service.dart';
 
 /// Google Play Store specific subscription management service
 class GoogleSubscriptionService {
-  static final GoogleSubscriptionService _instance = GoogleSubscriptionService._internal();
+  static final GoogleSubscriptionService _instance =
+      GoogleSubscriptionService._internal();
   factory GoogleSubscriptionService() => _instance;
   GoogleSubscriptionService._internal();
 
@@ -48,19 +49,21 @@ class GoogleSubscriptionService {
   /// Initialize Google subscription service
   Future<void> initialize() async {
     if (!io.Platform.isAndroid) {
-      AppLogger.log('Google Subscription Service: Not running on Android, skipping initialization');
+      AppLogger.log(
+        'Google Subscription Service: Not running on Android, skipping initialization',
+      );
       return;
     }
 
     AppLogger.log('Initializing Google Subscription Service...');
-    
+
     try {
       // Load stored Google subscription data
       await _loadGoogleSubscriptionData();
-      
+
       // Check for existing Google subscriptions
       await _checkGoogleSubscriptions();
-      
+
       AppLogger.log('Google Subscription Service initialized successfully');
     } catch (e) {
       AppLogger.log('Error initializing Google Subscription Service: $e');
@@ -72,9 +75,10 @@ class GoogleSubscriptionService {
     try {
       _purchaseToken = _storage.read(_googlePurchaseTokenKey);
       _orderId = _storage.read(_googleOrderIdKey);
-      _packageName = _storage.read(_googlePackageNameKey) ?? 'com.digitalpayments';
+      _packageName =
+          _storage.read(_googlePackageNameKey) ?? 'com.digitalpayments';
       _isAcknowledged = _storage.read(_googleAcknowledgedKey) ?? false;
-      
+
       AppLogger.log('Loaded Google subscription data from storage');
     } catch (e) {
       AppLogger.log('Error loading Google subscription data: $e');
@@ -86,7 +90,7 @@ class GoogleSubscriptionService {
     try {
       // Restore Google Play purchases
       await _inAppPurchase.restorePurchases();
-      
+
       // If we have stored purchase token, validate it
       if (_purchaseToken != null) {
         await _validateGooglePurchase(_purchaseToken!);
@@ -99,17 +103,19 @@ class GoogleSubscriptionService {
   /// Purchase Google subscription
   Future<bool> purchaseGoogleSubscription() async {
     if (!io.Platform.isAndroid) {
-      AppLogger.log('Cannot purchase Google subscription on non-Android platform');
+      AppLogger.log(
+        'Cannot purchase Google subscription on non-Android platform',
+      );
       return false;
     }
 
     try {
       AppLogger.log('Starting Google subscription purchase...');
-      
+
       // Get Google product details
       final productId = SubscriptionConfig.androidSubscriptionId;
       final response = await _inAppPurchase.queryProductDetails({productId});
-      
+
       if (response.productDetails.isEmpty) {
         AppLogger.log('Google subscription product not found: $productId');
         return false;
@@ -117,10 +123,12 @@ class GoogleSubscriptionService {
 
       final productDetails = response.productDetails.first;
       final purchaseParam = PurchaseParam(productDetails: productDetails);
-      
+
       // Initiate purchase
-      final success = await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
-      
+      final success = await _inAppPurchase.buyNonConsumable(
+        purchaseParam: purchaseParam,
+      );
+
       AppLogger.log('Google subscription purchase initiated: $success');
       return success;
     } catch (e) {
@@ -133,34 +141,40 @@ class GoogleSubscriptionService {
   Future<void> handleGooglePurchase(PurchaseDetails purchaseDetails) async {
     try {
       AppLogger.log('Handling Google purchase: ${purchaseDetails.productID}');
-      
-      if (purchaseDetails.productID == SubscriptionConfig.androidSubscriptionId) {
+
+      if (purchaseDetails.productID ==
+          SubscriptionConfig.androidSubscriptionId) {
         // Extract Google-specific data
         _orderId = purchaseDetails.purchaseID;
         _packageName = 'com.digitalpayments'; // Your app's package name
-        
+
         // For Android, the purchase token is in verificationData.serverVerificationData
-        if (purchaseDetails.verificationData.serverVerificationData.isNotEmpty) {
+        if (purchaseDetails
+            .verificationData
+            .serverVerificationData
+            .isNotEmpty) {
           // Parse the purchase data to extract purchase token
-          final purchaseData = json.decode(purchaseDetails.verificationData.localVerificationData);
+          final purchaseData = json.decode(
+            purchaseDetails.verificationData.localVerificationData,
+          );
           _purchaseToken = purchaseData['purchaseToken'];
-          
+
           if (_purchaseToken != null) {
             // Validate purchase with Google Play
             final isValid = await _validateGooglePurchase(_purchaseToken!);
-            
+
             if (isValid) {
               // Acknowledge the purchase if not already acknowledged
               if (!_isAcknowledged) {
                 await _acknowledgePurchase(purchaseDetails);
               }
-              
+
               // Save Google subscription data
               await _saveGoogleSubscriptionData();
-              
+
               // Update subscription status
               _isGoogleSubscriptionActive = true;
-              
+
               AppLogger.log('Google subscription activated successfully');
             }
           }
@@ -188,7 +202,7 @@ class GoogleSubscriptionService {
   Future<bool> _validateGooglePurchase(String purchaseToken) async {
     try {
       AppLogger.log('Validating Google Play purchase...');
-      
+
       final user = _auth.currentUser;
       if (user == null) {
         AppLogger.log('No authenticated user for Google purchase validation');
@@ -198,7 +212,7 @@ class GoogleSubscriptionService {
       // Call Firebase Function for Google Play validation
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('validateGooglePlayPurchase');
-      
+
       final result = await callable.call({
         'packageName': _packageName,
         'subscriptionId': SubscriptionConfig.androidSubscriptionId,
@@ -208,28 +222,32 @@ class GoogleSubscriptionService {
 
       if (result.data['success'] == true) {
         final purchaseInfo = result.data['purchase'];
-        
+
         // Extract expiry date from purchase info
         if (purchaseInfo['expiryTimeMillis'] != null) {
-          final expiryMs = int.parse(purchaseInfo['expiryTimeMillis'].toString());
+          final expiryMs = int.parse(
+            purchaseInfo['expiryTimeMillis'].toString(),
+          );
           _googleExpiryDate = DateTime.fromMillisecondsSinceEpoch(expiryMs);
         }
-        
+
         // Extract start date
         if (purchaseInfo['startTimeMillis'] != null) {
           final startMs = int.parse(purchaseInfo['startTimeMillis'].toString());
           _googleStartDate = DateTime.fromMillisecondsSinceEpoch(startMs);
         }
-        
+
         // Check if purchase is acknowledged
         if (purchaseInfo['acknowledgementState'] != null) {
           _isAcknowledged = purchaseInfo['acknowledgementState'] == 1;
         }
-        
+
         AppLogger.log('Google Play purchase validation successful');
         return true;
       } else {
-        AppLogger.log('Google Play purchase validation failed: ${result.data['error']}');
+        AppLogger.log(
+          'Google Play purchase validation failed: ${result.data['error']}',
+        );
         return false;
       }
     } catch (e) {
@@ -251,7 +269,7 @@ class GoogleSubscriptionService {
         await _storage.write(_googlePackageNameKey, _packageName);
       }
       await _storage.write(_googleAcknowledgedKey, _isAcknowledged);
-      
+
       AppLogger.log('Google subscription data saved to storage');
     } catch (e) {
       AppLogger.log('Error saving Google subscription data: $e');
@@ -264,7 +282,7 @@ class GoogleSubscriptionService {
       if (_purchaseToken != null) {
         // Validate current purchase token
         final isValid = await _validateGooglePurchase(_purchaseToken!);
-        
+
         return {
           'isActive': isValid && _isGoogleSubscriptionActive,
           'expiryDate': _googleExpiryDate?.toIso8601String(),
@@ -277,7 +295,7 @@ class GoogleSubscriptionService {
           'packageName': _packageName,
         };
       }
-      
+
       return {
         'isActive': false,
         'platform': 'google',
@@ -286,11 +304,7 @@ class GoogleSubscriptionService {
       };
     } catch (e) {
       AppLogger.log('Error getting Google subscription status: $e');
-      return {
-        'isActive': false,
-        'error': e.toString(),
-        'platform': 'google',
-      };
+      return {'isActive': false, 'error': e.toString(), 'platform': 'google'};
     }
   }
 
@@ -298,7 +312,7 @@ class GoogleSubscriptionService {
   Future<void> cancelGoogleSubscription() async {
     try {
       AppLogger.log('Initiating Google subscription cancellation...');
-      
+
       if (_purchaseToken == null) {
         AppLogger.log('No active Google subscription to cancel');
         return;
@@ -307,7 +321,7 @@ class GoogleSubscriptionService {
       // Call Firebase Function to cancel subscription
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('cancelGoogleSubscription');
-      
+
       final result = await callable.call({
         'packageName': _packageName,
         'subscriptionId': SubscriptionConfig.androidSubscriptionId,
@@ -318,9 +332,9 @@ class GoogleSubscriptionService {
       if (result.data['success'] == true) {
         // Update local state
         _isGoogleSubscriptionActive = false;
-        
+
         AppLogger.log('Google subscription cancelled successfully');
-        
+
         Get.snackbar(
           'Subscription Cancelled',
           'Your subscription has been cancelled successfully.',
@@ -329,8 +343,10 @@ class GoogleSubscriptionService {
           colorText: Get.theme.colorScheme.onSecondary,
         );
       } else {
-        AppLogger.log('Failed to cancel Google subscription: ${result.data['error']}');
-        
+        AppLogger.log(
+          'Failed to cancel Google subscription: ${result.data['error']}',
+        );
+
         // Provide manual cancellation instructions
         Get.dialog(
           AlertDialog(
@@ -343,17 +359,14 @@ class GoogleSubscriptionService {
               '4. Tap "Cancel subscription"',
             ),
             actions: [
-              TextButton(
-                onPressed: () => Get.back(),
-                child: const Text('OK'),
-              ),
+              TextButton(onPressed: () => Get.back(), child: const Text('OK')),
             ],
           ),
         );
       }
     } catch (e) {
       AppLogger.log('Error cancelling Google subscription: $e');
-      
+
       Get.snackbar(
         'Error',
         'Failed to cancel subscription. Please try again or contact support.',
@@ -368,7 +381,7 @@ class GoogleSubscriptionService {
   Future<void> deferGoogleSubscription(int deferralDays) async {
     try {
       AppLogger.log('Deferring Google subscription for $deferralDays days...');
-      
+
       if (_purchaseToken == null) {
         AppLogger.log('No active Google subscription to defer');
         return;
@@ -377,25 +390,33 @@ class GoogleSubscriptionService {
       // Call Firebase Function to defer subscription
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('deferGoogleSubscription');
-      
+
       final result = await callable.call({
         'packageName': _packageName,
         'subscriptionId': SubscriptionConfig.androidSubscriptionId,
         'purchaseToken': _purchaseToken,
         'deferralInfo': {
-          'expectedExpiryTimeMillis': _googleExpiryDate?.add(Duration(days: deferralDays)).millisecondsSinceEpoch,
-          'desiredExpiryTimeMillis': _googleExpiryDate?.add(Duration(days: deferralDays)).millisecondsSinceEpoch,
+          'expectedExpiryTimeMillis':
+              _googleExpiryDate
+                  ?.add(Duration(days: deferralDays))
+                  .millisecondsSinceEpoch,
+          'desiredExpiryTimeMillis':
+              _googleExpiryDate
+                  ?.add(Duration(days: deferralDays))
+                  .millisecondsSinceEpoch,
         },
         'userId': _auth.currentUser?.uid,
       });
 
       if (result.data['success'] == true) {
         // Update local expiry date
-        _googleExpiryDate = _googleExpiryDate?.add(Duration(days: deferralDays));
+        _googleExpiryDate = _googleExpiryDate?.add(
+          Duration(days: deferralDays),
+        );
         await _saveGoogleSubscriptionData();
-        
+
         AppLogger.log('Google subscription deferred successfully');
-        
+
         Get.snackbar(
           'Subscription Deferred',
           'Your subscription has been extended by $deferralDays days.',
@@ -404,7 +425,9 @@ class GoogleSubscriptionService {
           colorText: Get.theme.colorScheme.onSecondary,
         );
       } else {
-        AppLogger.log('Failed to defer Google subscription: ${result.data['error']}');
+        AppLogger.log(
+          'Failed to defer Google subscription: ${result.data['error']}',
+        );
       }
     } catch (e) {
       AppLogger.log('Error deferring Google subscription: $e');
@@ -418,7 +441,7 @@ class GoogleSubscriptionService {
       await _storage.remove(_googleOrderIdKey);
       await _storage.remove(_googlePackageNameKey);
       await _storage.remove(_googleAcknowledgedKey);
-      
+
       _purchaseToken = null;
       _orderId = null;
       _packageName = null;
@@ -426,7 +449,7 @@ class GoogleSubscriptionService {
       _isAcknowledged = false;
       _googleExpiryDate = null;
       _googleStartDate = null;
-      
+
       AppLogger.log('Google subscription data cleared');
     } catch (e) {
       AppLogger.log('Error clearing Google subscription data: $e');

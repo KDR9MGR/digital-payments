@@ -6,6 +6,7 @@ import 'package:ionicons/ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:xpay/controller/add_money_controller.dart';
 import 'package:xpay/controller/subscription_controller.dart';
+import 'package:xpay/screens/paywall_screen.dart';
 import 'package:xpay/utils/input_formatters.dart';
 import 'package:xpay/utils/utils.dart';
 import 'package:xpay/views/auth/user_provider.dart';
@@ -448,7 +449,16 @@ class _AddMoneyMoneyScreenState extends State<AddMoneyMoneyScreen>
           title: Strings.addMoney.tr,
           onPressed: () async {
             if (formKey.currentState!.validate()) {
-              _showCardDetailsDialog(context, _walletViewModel!);
+              final subscriptionController = Get.find<SubscriptionController>();
+              if (subscriptionController.hasActiveSubscription) {
+                _showCardDetailsDialog(context, _walletViewModel!);
+              } else {
+                Get.to(
+                  () => const PaywallScreen(),
+                  fullscreenDialog: true,
+                  transition: Transition.cupertino,
+                );
+              }
             }
           },
           borderColorName: Colors.transparent,

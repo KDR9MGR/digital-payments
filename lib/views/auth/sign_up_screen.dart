@@ -106,7 +106,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         SizedBox(height: Dimensions.heightSize),
         _buttonWidget(context, controller, Strings.user),
         SizedBox(height: Dimensions.heightSize),
-        _googleSignInButton(context),
+        // _googleSignInButton(context), // Hidden as requested
       ],
     );
   }

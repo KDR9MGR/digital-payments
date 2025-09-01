@@ -76,7 +76,8 @@ class UnifiedSubscriptionController extends GetxController {
 
   /// Listen to purchase updates from the platform
   void _listenToPurchaseUpdates() {
-    final Stream<List<PurchaseDetails>> purchaseUpdated = InAppPurchase.instance.purchaseStream;
+    final Stream<List<PurchaseDetails>> purchaseUpdated =
+        InAppPurchase.instance.purchaseStream;
     _purchaseSubscription = purchaseUpdated.listen(
       (List<PurchaseDetails> purchaseDetailsList) {
         _handlePurchaseUpdates(purchaseDetailsList);
@@ -91,14 +92,18 @@ class UnifiedSubscriptionController extends GetxController {
   }
 
   /// Handle purchase updates from the platform
-  Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchaseDetailsList) async {
+  Future<void> _handlePurchaseUpdates(
+    List<PurchaseDetails> purchaseDetailsList,
+  ) async {
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
       try {
-        AppLogger.log('Processing purchase update: ${purchaseDetails.productID}');
+        AppLogger.log(
+          'Processing purchase update: ${purchaseDetails.productID}',
+        );
 
         if (purchaseDetails.productID == SubscriptionConfig.iosSubscriptionId ||
-            purchaseDetails.productID == SubscriptionConfig.androidSubscriptionId) {
-          
+            purchaseDetails.productID ==
+                SubscriptionConfig.androidSubscriptionId) {
           if (purchaseDetails.status == PurchaseStatus.purchased) {
             // Handle successful purchase
             if (io.Platform.isIOS) {
@@ -106,14 +111,16 @@ class UnifiedSubscriptionController extends GetxController {
             } else if (io.Platform.isAndroid) {
               await _googleService.handleGooglePurchase(purchaseDetails);
             }
-            
+
             // Refresh subscription status
             await refreshSubscriptionStatus();
-            
+
             _showSuccess('Subscription activated successfully!');
           } else if (purchaseDetails.status == PurchaseStatus.error) {
             AppLogger.log('Purchase error: ${purchaseDetails.error}');
-            _showError('Purchase failed: ${purchaseDetails.error?.message ?? "Unknown error"}');
+            _showError(
+              'Purchase failed: ${purchaseDetails.error?.message ?? "Unknown error"}',
+            );
           } else if (purchaseDetails.status == PurchaseStatus.canceled) {
             AppLogger.log('Purchase cancelled by user');
             _showInfo('Purchase cancelled');
@@ -138,7 +145,9 @@ class UnifiedSubscriptionController extends GetxController {
   Future<void> purchaseSubscription() async {
     try {
       isLoading.value = true;
-      AppLogger.log('Starting subscription purchase for platform: ${currentPlatform.value}');
+      AppLogger.log(
+        'Starting subscription purchase for platform: ${currentPlatform.value}',
+      );
 
       bool success = false;
 
@@ -166,14 +175,16 @@ class UnifiedSubscriptionController extends GetxController {
   Future<void> restorePurchases() async {
     try {
       isLoading.value = true;
-      AppLogger.log('Restoring purchases for platform: ${currentPlatform.value}');
+      AppLogger.log(
+        'Restoring purchases for platform: ${currentPlatform.value}',
+      );
 
       // Use the platform's restore purchases functionality
       await InAppPurchase.instance.restorePurchases();
-      
+
       // Refresh subscription status
       await refreshSubscriptionStatus();
-      
+
       if (isSubscriptionActive.value) {
         _showSuccess('Subscription restored successfully!');
       } else {
@@ -203,13 +214,14 @@ class UnifiedSubscriptionController extends GetxController {
       // Update reactive variables
       isSubscriptionActive.value = status['isActive'] ?? false;
       subscriptionDetails.value = status;
-      
+
       if (status['expiryDate'] != null) {
         expiryDate.value = DateTime.tryParse(status['expiryDate']);
       }
-      
-      subscriptionStatus.value = isSubscriptionActive.value ? 'active' : 'inactive';
-      
+
+      subscriptionStatus.value =
+          isSubscriptionActive.value ? 'active' : 'inactive';
+
       AppLogger.log('Subscription status updated: ${subscriptionStatus.value}');
     } catch (e) {
       AppLogger.log('Error refreshing subscription status: $e');
@@ -220,7 +232,9 @@ class UnifiedSubscriptionController extends GetxController {
   Future<void> cancelSubscription() async {
     try {
       isLoading.value = true;
-      AppLogger.log('Cancelling subscription for platform: ${currentPlatform.value}');
+      AppLogger.log(
+        'Cancelling subscription for platform: ${currentPlatform.value}',
+      );
 
       if (io.Platform.isIOS) {
         await _appleService.cancelAppleSubscription();
@@ -240,10 +254,11 @@ class UnifiedSubscriptionController extends GetxController {
 
   /// Get subscription plan details
   Map<String, dynamic> getSubscriptionPlan() {
-    final productId = io.Platform.isIOS 
-        ? SubscriptionConfig.iosSubscriptionId 
-        : SubscriptionConfig.androidSubscriptionId;
-    
+    final productId =
+        io.Platform.isIOS
+            ? SubscriptionConfig.iosSubscriptionId
+            : SubscriptionConfig.androidSubscriptionId;
+
     final plan = SubscriptionConfig.subscriptionPlans[productId];
     if (plan != null) {
       return {
@@ -261,7 +276,7 @@ class UnifiedSubscriptionController extends GetxController {
         ],
       };
     }
-    
+
     return {
       'name': SubscriptionConfig.googlePlaySubscriptionName,
       'price': '\$1.99',
@@ -279,9 +294,10 @@ class UnifiedSubscriptionController extends GetxController {
   Map<String, dynamic> getPlatformSubscriptionDetails() {
     return {
       'platform': currentPlatform.value,
-      'productId': io.Platform.isIOS 
-          ? SubscriptionConfig.iosSubscriptionId 
-          : SubscriptionConfig.androidSubscriptionId,
+      'productId':
+          io.Platform.isIOS
+              ? SubscriptionConfig.iosSubscriptionId
+              : SubscriptionConfig.androidSubscriptionId,
       'isActive': isSubscriptionActive.value,
       'status': subscriptionStatus.value,
       'expiryDate': expiryDate.value?.toIso8601String(),
@@ -292,24 +308,24 @@ class UnifiedSubscriptionController extends GetxController {
   /// Check if subscription is about to expire (within 7 days)
   bool isSubscriptionExpiringSoon() {
     if (expiryDate.value == null) return false;
-    
+
     final now = DateTime.now();
     final daysUntilExpiry = expiryDate.value!.difference(now).inDays;
-    
+
     return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
   }
 
   /// Check if subscription has expired
   bool isSubscriptionExpired() {
     if (expiryDate.value == null) return false;
-    
+
     return DateTime.now().isAfter(expiryDate.value!);
   }
 
   /// Get days until expiry
   int getDaysUntilExpiry() {
     if (expiryDate.value == null) return 0;
-    
+
     return expiryDate.value!.difference(DateTime.now()).inDays;
   }
 
@@ -370,9 +386,10 @@ class UnifiedSubscriptionController extends GetxController {
         color: Get.theme.cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isSubscriptionActive.value 
-              ? Get.theme.colorScheme.primary 
-              : Get.theme.dividerColor,
+          color:
+              isSubscriptionActive.value
+                  ? Get.theme.colorScheme.primary
+                  : Get.theme.dividerColor,
         ),
       ),
       child: Column(
@@ -382,17 +399,19 @@ class UnifiedSubscriptionController extends GetxController {
             children: [
               Icon(
                 isSubscriptionActive.value ? Icons.check_circle : Icons.cancel,
-                color: isSubscriptionActive.value 
-                    ? Get.theme.colorScheme.primary 
-                    : Get.theme.colorScheme.error,
+                color:
+                    isSubscriptionActive.value
+                        ? Get.theme.colorScheme.primary
+                        : Get.theme.colorScheme.error,
               ),
               const SizedBox(width: 8),
               Text(
                 isSubscriptionActive.value ? 'Active' : 'Inactive',
                 style: Get.textTheme.titleMedium?.copyWith(
-                  color: isSubscriptionActive.value 
-                      ? Get.theme.colorScheme.primary 
-                      : Get.theme.colorScheme.error,
+                  color:
+                      isSubscriptionActive.value
+                          ? Get.theme.colorScheme.primary
+                          : Get.theme.colorScheme.error,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -420,15 +439,15 @@ class UnifiedSubscriptionController extends GetxController {
     return Column(
       children: [
         if (!isSubscriptionActive.value) ...[
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: purchaseSubscription,
-                child: const Text('Subscribe Now'),
-              ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: purchaseSubscription,
+              child: const Text('Subscribe Now'),
             ),
-            const SizedBox(height: 12),
-          ],
+          ),
+          const SizedBox(height: 12),
+        ],
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(
@@ -451,10 +470,7 @@ class UnifiedSubscriptionController extends GetxController {
           ),
         ],
         const SizedBox(height: 12),
-        TextButton(
-          onPressed: () => Get.back(),
-          child: const Text('Close'),
-        ),
+        TextButton(onPressed: () => Get.back(), child: const Text('Close')),
       ],
     );
   }

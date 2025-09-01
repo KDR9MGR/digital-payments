@@ -116,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
           SizedBox(height: Dimensions.heightSize * 2),
           _buttonWidget(context, controller),
           SizedBox(height: Dimensions.heightSize),
-          _googleSignInButton(context),
+          // _googleSignInButton(context), // Hidden as requested
         ],
       ),
     );

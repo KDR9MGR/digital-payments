@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read and write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Subscriptions collection - allow Cloud Functions to write, users to read their own
+    match /subscriptions/{subscriptionId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow write: if request.auth == null; // Allow Cloud Functions (server-side) to write
+    }
+    
+    // Allow users to read and write their own documents in other collections
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

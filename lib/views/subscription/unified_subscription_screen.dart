@@ -14,45 +14,34 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return GetBuilder<UnifiedSubscriptionController>(
       init: UnifiedSubscriptionController(),
-      builder: (controller) => Scaffold(
-        backgroundColor: CustomColor.screenBGColor,
-        appBar: AppBar(
-          title: Text(
-            'Premium Subscription',
-            style: CustomStyle.commonTextTitleWhite,
-          ),
-          backgroundColor: CustomColor.primaryColor,
-          elevation: 0,
-          leading: IconButton(
-            onPressed: () => Get.back(),
-            icon: const Icon(
-              Icons.arrow_back_ios,
-              color: CustomColor.primaryTextColor,
-            ),
-          ),
-          actions: [
-            IconButton(
-              onPressed: () => controller.refreshSubscriptionStatus(),
-              icon: const Icon(
-                Icons.refresh,
-                color: CustomColor.primaryTextColor,
+      builder:
+          (controller) => Scaffold(
+            backgroundColor: CustomColor.screenBGColor,
+            appBar: AppBar(
+              title: Text(
+                'Premium Subscription',
+                style: CustomStyle.commonTextTitleWhite,
               ),
-            ),
-            IconButton(
-              onPressed: () => controller.showSubscriptionManagement(),
-              icon: const Icon(
-                Icons.settings,
-                color: CustomColor.primaryTextColor,
+              backgroundColor: CustomColor.primaryColor,
+              elevation: 0,
+              leading: IconButton(
+                onPressed: () => Get.back(),
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
               ),
+              actions: [
+                IconButton(
+                  onPressed: () => controller.refreshSubscriptionStatus(),
+                  icon: const Icon(Icons.refresh, color: Colors.white),
+                ),
+              ],
             ),
-          ],
-        ),
-        body: Obx(
-          () => controller.isLoading.value
-              ? const Center(child: CircularProgressIndicator())
-              : _bodyWidget(context, controller),
-        ),
-      ),
+            body: Obx(
+              () =>
+                  controller.isLoading.value
+                      ? const Center(child: CircularProgressIndicator())
+                      : _bodyWidget(context, controller),
+            ),
+          ),
     );
   }
 
@@ -64,15 +53,16 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
       padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width -
+          maxWidth:
+              MediaQuery.of(context).size.width -
               (Dimensions.defaultPaddingSize * 2),
         ),
         child: Column(
           children: [
             _subscriptionStatusWidget(controller),
             SizedBox(height: Dimensions.heightSize * 2),
-            _platformInfoWidget(controller),
-            SizedBox(height: Dimensions.heightSize * 2),
+            // _platformInfoWidget(controller), // Hidden as requested
+            // SizedBox(height: Dimensions.heightSize * 2),
             if (controller.isSubscriptionActive.value) ...[
               _currentPlanWidget(controller),
               SizedBox(height: Dimensions.heightSize * 2),
@@ -93,7 +83,7 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
       final isActive = controller.isSubscriptionActive.value;
       final isExpiringSoon = controller.isSubscriptionExpiringSoon();
       final isExpired = controller.isSubscriptionExpired();
-      
+
       Color statusColor;
       String statusTitle;
       String statusSubtitle;
@@ -124,31 +114,13 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
       return Container(
         padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              statusColor.withValues(alpha: 0.2),
-              statusColor.withValues(alpha: 0.1),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(Dimensions.radius * 2),
-          border: Border.all(color: statusColor, width: 1),
+          color: statusColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(Dimensions.radius),
+          border: Border.all(color: statusColor.withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [
-            Container(
-              padding: EdgeInsets.all(Dimensions.defaultPaddingSize * 0.4),
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                statusIcon,
-                color: Colors.white,
-                size: 24.r,
-              ),
-            ),
+            Icon(statusIcon, color: statusColor, size: 40.r),
             SizedBox(width: Dimensions.widthSize),
             Expanded(
               child: Column(
@@ -162,10 +134,7 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: Dimensions.heightSize * 0.3),
-                  Text(
-                    statusSubtitle,
-                    style: CustomStyle.cardSubtitleStyle,
-                  ),
+                  Text(statusSubtitle, style: CustomStyle.cardSubtitleStyle),
                 ],
               ),
             ),
@@ -178,40 +147,45 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
   Widget _platformInfoWidget(UnifiedSubscriptionController controller) {
     return Obx(() {
       final platform = controller.currentPlatform.value;
-      final platformName = platform == 'ios' ? 'Apple App Store' : 
-                          platform == 'android' ? 'Google Play Store' : 'Unknown';
-      final platformIcon = platform == 'ios' ? Icons.apple : 
-                          platform == 'android' ? Icons.android : Icons.device_unknown;
-      
+      final platformName =
+          platform == 'ios'
+              ? 'Apple App Store'
+              : platform == 'android'
+              ? 'Google Play Store'
+              : 'Unknown';
+      final platformIcon =
+          platform == 'ios'
+              ? Icons.apple
+              : platform == 'android'
+              ? Icons.android
+              : Icons.device_unknown;
+
       return Container(
-        padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
+        padding: EdgeInsets.all(Dimensions.defaultPaddingSize * 1.2),
         decoration: BoxDecoration(
-          color: CustomColor.surfaceColor,
-          borderRadius: BorderRadius.circular(Dimensions.radius * 2),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20.r),
+          border: Border.all(
+            color: Colors.grey.withValues(alpha: 0.1),
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 10,
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 15,
               offset: const Offset(0, 5),
             ),
           ],
         ),
         child: Row(
           children: [
-            Icon(
-              platformIcon,
-              size: 32.r,
-              color: CustomColor.primaryColor,
-            ),
+            Icon(platformIcon, size: 32.r, color: CustomColor.primaryColor),
             SizedBox(width: Dimensions.widthSize),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                  'Platform',
-                  style: CustomStyle.cardSubtitleStyle,
-                ),
+                  Text('Platform', style: CustomStyle.cardSubtitleStyle),
                   Text(
                     platformName,
                     style: CustomStyle.commonTextTitle.copyWith(
@@ -229,19 +203,15 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
 
   Widget _currentPlanWidget(UnifiedSubscriptionController controller) {
     final plan = controller.getSubscriptionPlan();
-    
+
     return Container(
       padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
       decoration: BoxDecoration(
         color: CustomColor.surfaceColor,
-        borderRadius: BorderRadius.circular(Dimensions.radius * 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(Dimensions.radius),
+        border: Border.all(
+          color: CustomColor.primaryColor.withValues(alpha: 0.2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,7 +232,7 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: CustomColor.primaryColor,
-                  borderRadius: BorderRadius.circular(Dimensions.radius),
+                  borderRadius: BorderRadius.circular(Dimensions.radius * 0.5),
                 ),
                 child: Text(
                   'ACTIVE',
@@ -277,16 +247,16 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
           ),
           SizedBox(height: Dimensions.heightSize),
           Text(
-              plan['name'] ?? 'Digital Payments -Premium',
-              style: CustomStyle.commonLargeTextTitleWhite.copyWith(
-                color: CustomColor.primaryTextColor,
-              ),
+            plan['name'] ?? 'Digital Payments -Premium',
+            style: CustomStyle.commonLargeTextTitleWhite.copyWith(
+              color: CustomColor.primaryTextColor,
             ),
+          ),
           SizedBox(height: Dimensions.heightSize * 0.5),
           Text(
-              plan['description'] ?? 'Premium subscription with all features',
-              style: CustomStyle.cardSubtitleStyle,
-            ),
+            plan['description'] ?? 'Premium subscription with all features',
+            style: CustomStyle.cardSubtitleStyle,
+          ),
           SizedBox(height: Dimensions.heightSize),
           Row(
             children: [
@@ -312,7 +282,7 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
     return Obx(() {
       final details = controller.subscriptionDetails.value;
       final expiryDate = controller.expiryDate.value;
-      
+
       return Container(
         padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
         decoration: BoxDecoration(
@@ -337,7 +307,10 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
             ),
             SizedBox(height: Dimensions.heightSize),
             if (expiryDate != null) ...[
-              _detailRow('Expires On', DateFormat('MMM dd, yyyy').format(expiryDate)),
+              _detailRow(
+                'Expires On',
+                DateFormat('MMM dd, yyyy').format(expiryDate),
+              ),
               SizedBox(height: Dimensions.heightSize * 0.5),
             ],
             if (details['orderId'] != null) ...[
@@ -348,9 +321,15 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
               _detailRow('Product ID', details['productId']),
               SizedBox(height: Dimensions.heightSize * 0.5),
             ],
-            _detailRow('Platform', controller.currentPlatform.value.toUpperCase()),
+            _detailRow(
+              'Platform',
+              controller.currentPlatform.value.toUpperCase(),
+            ),
             SizedBox(height: Dimensions.heightSize * 0.5),
-            _detailRow('Status', controller.subscriptionStatus.value.toUpperCase()),
+            _detailRow(
+              'Status',
+              controller.subscriptionStatus.value.toUpperCase(),
+            ),
           ],
         ),
       );
@@ -361,10 +340,7 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: CustomStyle.cardSubtitleStyle,
-        ),
+        Text(label, style: CustomStyle.cardSubtitleStyle),
         Flexible(
           child: Text(
             value,
@@ -402,18 +378,8 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
           SizedBox(height: Dimensions.heightSize),
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => controller.restorePurchases(),
-                  icon: const Icon(Icons.restore),
-                  label: const Text('Restore'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: CustomColor.primaryColor,
-                    side: BorderSide(color: CustomColor.primaryColor),
-                  ),
-                ),
-              ),
-              SizedBox(width: Dimensions.widthSize),
+              // Restore button removed as requested
+              // SizedBox(width: Dimensions.widthSize),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => controller.cancelSubscription(),
@@ -471,18 +437,21 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
           ),
           SizedBox(height: Dimensions.heightSize),
           Text(
-            plan['description'] ?? 'Get premium features and enhanced functionality',
+            plan['description'] ??
+                'Get premium features and enhanced functionality',
             style: CustomStyle.cardSubtitleStyle,
             textAlign: TextAlign.center,
           ),
           SizedBox(height: Dimensions.heightSize * 2),
-          
+
           // Features list
           if (plan['features'] != null) ...[
             ...List.generate(
               (plan['features'] as List).length,
               (index) => Padding(
-                padding: EdgeInsets.symmetric(vertical: Dimensions.heightSize * 0.3),
+                padding: EdgeInsets.symmetric(
+                  vertical: Dimensions.heightSize * 0.3,
+                ),
                 child: Row(
                   children: [
                     Icon(
@@ -501,9 +470,9 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: Dimensions.heightSize * 2),
           ],
-          
+          SizedBox(height: Dimensions.heightSize * 2),
+
           // Price and subscribe button
           Container(
             padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
@@ -536,51 +505,45 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: Dimensions.heightSize),
-                SizedBox(
-                  width: double.infinity,
-                  child: Obx(() => ElevatedButton(
-                    onPressed: controller.isLoading.value 
-                        ? null 
-                        : () => controller.purchaseSubscription(),
+                Obx(
+                  () => ElevatedButton(
+                    onPressed:
+                        controller.isLoading.value
+                            ? null
+                            : () => controller.purchaseSubscription(),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: CustomColor.primaryColor,
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(
-                        vertical: Dimensions.defaultPaddingSize,
+                        vertical: Dimensions.heightSize,
+                        horizontal: Dimensions.widthSize * 2,
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(Dimensions.radius),
                       ),
                     ),
-                    child: controller.isLoading.value
-                        ? SizedBox(
-                            height: 20.h,
-                            width: 20.w,
-                            child: const CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    child:
+                        controller.isLoading.value
+                            ? SizedBox(
+                              height: 20.h,
+                              width: 20.w,
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                            : Text(
+                              'Subscribe Now',
+                              style: CustomStyle.commonTextTitle.copyWith(
+                                color: Colors.white,
+                              ),
                             ),
-                          )
-                        : Text(
-                            'Subscribe Now',
-                            style: CustomStyle.commonTextTitle.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  )),
-                ),
-                SizedBox(height: Dimensions.heightSize),
-                TextButton(
-                  onPressed: () => controller.restorePurchases(),
-                  child: Text(
-                    'Restore Previous Purchase',
-                    style: CustomStyle.cardSubtitleStyle.copyWith(
-                      color: CustomColor.primaryColor,
-                      decoration: TextDecoration.underline,
-                    ),
                   ),
                 ),
+                SizedBox(height: Dimensions.heightSize),
+                // Restore Previous Purchase button removed as requested
               ],
             ),
           ),

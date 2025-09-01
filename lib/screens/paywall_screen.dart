@@ -81,71 +81,99 @@ class _PaywallScreenState extends State<PaywallScreen> {
       _isLoading = true;
     });
 
-    try {
-      AppLogger.log('PaywallScreen: Initializing subscription service');
-      
-      // CRITICAL FIX: Add timeout to prevent indefinite loading
-      await _subscriptionService.initialize().timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          throw TimeoutException('Service initialization timed out', const Duration(seconds: 15));
-        },
-      );
-      
-      _products = _subscriptionService.products;
-      AppLogger.log('PaywallScreen: Loaded ${_products.length} products');
-
-      if (_products.isNotEmpty) {
-        _selectedProductId = _products.first.id;
+    // ENHANCED: Add multiple retry attempts with progressive delays
+    int maxRetries = 3;
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
         AppLogger.log(
-          'PaywallScreen: Selected default product: $_selectedProductId',
+          'PaywallScreen: Initializing subscription service (attempt $attempt/$maxRetries)',
         );
-      } else {
-        AppLogger.log('PaywallScreen: No subscription products available');
-        
-        // CRITICAL FIX: Retry initialization once before showing error
-        AppLogger.log('PaywallScreen: Retrying service initialization...');
-        await Future.delayed(const Duration(seconds: 2));
-        
+
+        // CRITICAL FIX: Add timeout to prevent indefinite loading
         await _subscriptionService.initialize().timeout(
-          const Duration(seconds: 10),
+          Duration(seconds: 10 + (attempt * 5)), // Progressive timeout
           onTimeout: () {
-            throw TimeoutException('Retry initialization timed out', const Duration(seconds: 10));
+            throw TimeoutException(
+              'Service initialization timed out on attempt $attempt',
+              Duration(seconds: 10 + (attempt * 5)),
+            );
           },
         );
-        
+
         _products = _subscriptionService.products;
-        
+        AppLogger.log(
+          'PaywallScreen: Loaded ${_products.length} products on attempt $attempt',
+        );
+
+        // If we got products, break out of retry loop
         if (_products.isNotEmpty) {
-          _selectedProductId = _products.first.id;
-          AppLogger.log('PaywallScreen: Retry successful, loaded ${_products.length} products');
-        } else {
-          _showErrorDialog(
-            'Subscription products are not available. Please try again later or contact support.',
-          );
+          break;
         }
+
+        // If no products and not the last attempt, wait before retrying
+        if (attempt < maxRetries) {
+          AppLogger.log(
+            'PaywallScreen: No products found, waiting before retry...',
+          );
+          await Future.delayed(Duration(seconds: 2 * attempt));
+        }
+      } catch (e) {
+        AppLogger.log('PaywallScreen: Error on attempt $attempt: $e');
+
+        if (attempt == maxRetries) {
+          // On final attempt, handle the error
+          String errorMessage =
+              'Failed to load subscription options. Please check your connection and try again.';
+
+          if (e.toString().contains('timeout') ||
+              e.toString().contains('TimeoutException')) {
+            errorMessage =
+                'Loading is taking longer than expected. Please check your internet connection and try again.';
+          } else if (e.toString().contains('billing_unavailable') ||
+              e.toString().contains('BillingUnavailable')) {
+            errorMessage =
+                'In-app purchases are not available on this device. Please check your device settings.';
+          } else if (e.toString().contains('NO_PRODUCTS_FOUND')) {
+            errorMessage =
+                'Subscription products are temporarily unavailable. This might be due to app store configuration. Please try again later.';
+          }
+
+          _showErrorDialog(errorMessage, showRetry: true);
+          setState(() {
+            _isLoading = false;
+            _hasInitialized = true;
+          });
+          return;
+        }
+
+        // Wait before next retry
+        await Future.delayed(Duration(seconds: 2 * attempt));
       }
-    } catch (e) {
-      AppLogger.log('PaywallScreen: Error loading products: $e');
-      
-      String errorMessage = 'Failed to load subscription options. Please check your connection and try again.';
-      
-      if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
-        errorMessage = 'Loading is taking longer than expected. Please check your internet connection and try again.';
-      } else if (e.toString().contains('billing_unavailable') || e.toString().contains('BillingUnavailable')) {
-        errorMessage = 'In-app purchases are not available on this device. Please check your device settings.';
-      }
-      
-      _showErrorDialog(errorMessage);
-    } finally {
-      setState(() {
-        _isLoading = false;
-        _hasInitialized = true;
-      });
+    }
+
+    // Handle the results after all retry attempts
+    if (_products.isNotEmpty) {
+      _selectedProductId = _products.first.id;
       AppLogger.log(
-        'PaywallScreen: Product loading completed. Loading: $_isLoading, Products: ${_products.length}',
+        'PaywallScreen: Selected default product: $_selectedProductId',
+      );
+    } else {
+      AppLogger.log(
+        'PaywallScreen: No subscription products available after all attempts',
+      );
+      _showErrorDialog(
+        'Subscription products are not available. This might be due to app store configuration. Please try again later or contact support.',
+        showRetry: true,
       );
     }
+
+    setState(() {
+      _isLoading = false;
+      _hasInitialized = true;
+    });
+    AppLogger.log(
+      'PaywallScreen: Product loading completed. Loading: $_isLoading, Products: ${_products.length}',
+    );
   }
 
   Future<void> _purchaseSubscription() async {
@@ -249,12 +277,20 @@ class _PaywallScreenState extends State<PaywallScreen> {
     });
   }
 
-  void _showErrorDialog(String message) {
+  void _showErrorDialog(String message, {bool showRetry = false}) {
     Get.dialog(
       AlertDialog(
         title: const Text('Error'),
         content: Text(message),
         actions: [
+          if (showRetry)
+            TextButton(
+              onPressed: () {
+                Get.back();
+                _loadProductsOptimized(); // Retry loading products
+              },
+              child: const Text('Retry'),
+            ),
           TextButton(onPressed: () => Get.back(), child: const Text('OK')),
         ],
       ),
@@ -405,16 +441,52 @@ class _PaywallScreenState extends State<PaywallScreen> {
                       else
                         Container(
                           padding: EdgeInsets.all(20.w),
-                          child: Text(
-                            'No subscription plans available. Please check your connection and try again.',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.bodyLarge?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                            textAlign: TextAlign.center,
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 48.w,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              SizedBox(height: 16.h),
+                              Text(
+                                'No subscription plans available',
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.titleMedium?.copyWith(
+                                  color:
+                                      Theme.of(context).colorScheme.onSurface,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: 8.h),
+                              Text(
+                                'Please check your connection and try again.',
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.7),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: 20.h),
+                              ElevatedButton.icon(
+                                onPressed: _loadProductsOptimized,
+                                icon: Icon(Icons.refresh, size: 20.w),
+                                label: Text('Retry'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12.r),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
 

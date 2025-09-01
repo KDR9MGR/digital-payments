@@ -8,11 +8,13 @@ import '../utils/app_logger.dart';
 class PurchaseValidationService {
   static final FirebaseFunctions _functions = FirebaseFunctions.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   // Apple App Store validation URLs
-  static const String _appleProductionUrl = 'https://buy.itunes.apple.com/verifyReceipt';
-  static const String _appleSandboxUrl = 'https://sandbox.itunes.apple.com/verifyReceipt';
-  
+  static const String _appleProductionUrl =
+      'https://buy.itunes.apple.com/verifyReceipt';
+  static const String _appleSandboxUrl =
+      'https://sandbox.itunes.apple.com/verifyReceipt';
+
   /// Validate Google Play Store purchase with Firebase Functions
   static Future<ValidationResult> validateGooglePlayPurchase({
     required String purchaseToken,
@@ -21,24 +23,25 @@ class PurchaseValidationService {
   }) async {
     try {
       AppLogger.log('Validating Google Play purchase for product: $productId');
-      
-      final callable = _functions.httpsCallable('validateGooglePlayPurchaseReal');
-      
+
+      final callable = _functions.httpsCallable('validateGooglePlayPurchase');
+
       final result = await callable.call({
         'purchaseToken': purchaseToken,
         'productId': productId,
         'packageName': packageName,
       });
-      
+
       final data = result.data as Map<String, dynamic>;
-      
+
       if (data['success'] == true) {
         return ValidationResult(
           isValid: true,
           transactionId: data['subscriptionId'],
-          expiryDate: data['expiryDate'] != null 
-              ? DateTime.parse(data['expiryDate'])
-              : null,
+          expiryDate:
+              data['expiryDate'] != null
+                  ? DateTime.parse(data['expiryDate'])
+                  : null,
         );
       } else {
         return ValidationResult(
@@ -54,7 +57,7 @@ class PurchaseValidationService {
       );
     }
   }
-  
+
   /// Validate Apple App Store purchase with Firebase Functions
   static Future<ValidationResult> validateAppleStorePurchase({
     required String receiptData,
@@ -62,23 +65,24 @@ class PurchaseValidationService {
   }) async {
     try {
       AppLogger.log('Validating Apple Store purchase for product: $productId');
-      
+
       final callable = _functions.httpsCallable('validateApplePayPurchaseReal');
-      
+
       final result = await callable.call({
         'receiptData': receiptData,
         'productId': productId,
       });
-      
+
       final data = result.data as Map<String, dynamic>;
-      
+
       if (data['success'] == true) {
         return ValidationResult(
           isValid: true,
           transactionId: data['subscriptionId'],
-          expiryDate: data['expiryDate'] != null 
-              ? DateTime.parse(data['expiryDate'])
-              : null,
+          expiryDate:
+              data['expiryDate'] != null
+                  ? DateTime.parse(data['expiryDate'])
+                  : null,
         );
       } else {
         return ValidationResult(
@@ -94,7 +98,7 @@ class PurchaseValidationService {
       );
     }
   }
-  
+
   /// Validate purchase receipt with Firebase Functions (unified method)
   /// This is the recommended approach for production apps
   static Future<ValidationResult> validatePurchaseWithServer({
@@ -131,37 +135,33 @@ class PurchaseValidationService {
       );
     }
   }
-  
+
   /// Get current subscription status from Firebase Functions
   static Future<SubscriptionStatus> getSubscriptionStatus(String userId) async {
     try {
       AppLogger.log('Fetching subscription status for user: $userId');
-      
+
       final callable = _functions.httpsCallable('checkSubscriptionStatus');
-      
-      final result = await callable.call({
-        'userId': userId,
-      });
-      
+
+      final result = await callable.call({'userId': userId});
+
       final data = result.data as Map<String, dynamic>;
-      
+
       return SubscriptionStatus(
         isActive: data['subscriptionStatus'] == 'active',
-        expiryDate: data['expiryDate'] != null 
-            ? DateTime.parse(data['expiryDate'])
-            : null,
+        expiryDate:
+            data['expiryDate'] != null
+                ? DateTime.parse(data['expiryDate'])
+                : null,
         productId: data['planType'],
         isInGracePeriod: data['isInGracePeriod'] ?? false,
       );
     } catch (e) {
       AppLogger.log('Error fetching subscription status: $e');
-      return SubscriptionStatus(
-        isActive: false,
-        expiryDate: null,
-      );
+      return SubscriptionStatus(isActive: false, expiryDate: null);
     }
   }
-  
+
   /// Direct Apple App Store receipt validation (fallback method)
   /// Note: This should only be used as a fallback. Server-side validation is preferred.
   static Future<ValidationResult> validateAppleReceipt({
@@ -171,9 +171,9 @@ class PurchaseValidationService {
   }) async {
     try {
       AppLogger.log('Validating Apple receipt directly');
-      
+
       final url = useSandbox ? _appleSandboxUrl : _appleProductionUrl;
-      
+
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -183,17 +183,14 @@ class PurchaseValidationService {
           'exclude-old-transactions': true,
         }),
       );
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final status = data['status'] as int;
-        
+
         if (status == 0) {
           // Receipt is valid
-          return ValidationResult(
-            isValid: true,
-            receiptData: data,
-          );
+          return ValidationResult(isValid: true, receiptData: data);
         } else if (status == 21007 && !useSandbox) {
           // Receipt is from sandbox, retry with sandbox URL
           return validateAppleReceipt(
@@ -221,7 +218,7 @@ class PurchaseValidationService {
       );
     }
   }
-  
+
   /// Get current Firebase Auth user token
   static Future<String?> _getAuthToken() async {
     try {
@@ -238,10 +235,7 @@ class PurchaseValidationService {
 }
 
 /// Platform enum for validation
-enum Platform {
-  iOS,
-  android,
-}
+enum Platform { iOS, android }
 
 /// Validation result model
 class ValidationResult {
@@ -250,7 +244,7 @@ class ValidationResult {
   final Map<String, dynamic>? receiptData;
   final DateTime? expiryDate;
   final String? transactionId;
-  
+
   ValidationResult({
     required this.isValid,
     this.errorMessage,
@@ -258,15 +252,16 @@ class ValidationResult {
     this.expiryDate,
     this.transactionId,
   });
-  
+
   factory ValidationResult.fromJson(Map<String, dynamic> json) {
     return ValidationResult(
       isValid: json['is_valid'] ?? false,
       errorMessage: json['error_message'],
       receiptData: json['receipt_data'],
-      expiryDate: json['expiry_date'] != null 
-          ? DateTime.fromMillisecondsSinceEpoch(json['expiry_date'])
-          : null,
+      expiryDate:
+          json['expiry_date'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(json['expiry_date'])
+              : null,
       transactionId: json['transaction_id'],
     );
   }
@@ -280,7 +275,7 @@ class SubscriptionStatus {
   final String? transactionId;
   final bool isInGracePeriod;
   final bool isInTrialPeriod;
-  
+
   SubscriptionStatus({
     required this.isActive,
     this.expiryDate,
@@ -289,25 +284,26 @@ class SubscriptionStatus {
     this.isInGracePeriod = false,
     this.isInTrialPeriod = false,
   });
-  
+
   factory SubscriptionStatus.fromJson(Map<String, dynamic> json) {
     return SubscriptionStatus(
       isActive: json['is_active'] ?? false,
-      expiryDate: json['expiry_date'] != null 
-          ? DateTime.fromMillisecondsSinceEpoch(json['expiry_date'])
-          : null,
+      expiryDate:
+          json['expiry_date'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(json['expiry_date'])
+              : null,
       productId: json['product_id'],
       transactionId: json['transaction_id'],
       isInGracePeriod: json['is_in_grace_period'] ?? false,
       isInTrialPeriod: json['is_in_trial_period'] ?? false,
     );
   }
-  
+
   bool get isExpired {
     if (expiryDate == null) return false;
     return DateTime.now().isAfter(expiryDate!);
   }
-  
+
   bool get isValidSubscription {
     return isActive && !isExpired;
   }
