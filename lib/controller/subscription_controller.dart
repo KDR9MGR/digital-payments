@@ -38,7 +38,7 @@ class SubscriptionController extends GetxController {
   final RxString _customerId = ''.obs;
   final RxString _moovAccountId = ''.obs;
   final RxBool _useMoovPayments =
-      true.obs; // Switch to use Moov instead of Stripe
+      false.obs; // Platform payments are primary, Moov is optional
   final RxBool _googlePayAvailable = false.obs;
   final RxBool _applePayAvailable = false.obs;
 
@@ -124,15 +124,17 @@ class SubscriptionController extends GetxController {
           AppLogger.log('Loaded subscription status from cache');
         }
 
+        // Always load customer ID for platform payments
+        await _loadCustomerId();
+
+        // Optionally load Moov account if needed (non-blocking)
         if (useMoovPayments) {
-          await _loadMoovAccountId();
-        } else {
-          await _loadCustomerId();
+          _loadMoovAccountId(); // Run asynchronously without blocking
         }
 
         // These methods should not fail the entire initialization
         try {
-          await _checkSubscriptionStatus();
+          await refreshSubscriptionStatus();
         } catch (e) {
           AppLogger.log('Warning: Could not check subscription status: $e');
         }
@@ -190,7 +192,7 @@ class SubscriptionController extends GetxController {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        AppLogger.log('User not authenticated, skipping Moov account creation');
+        AppLogger.log('User not authenticated, skipping Moov account loading');
         return;
       }
 
@@ -203,17 +205,15 @@ class SubscriptionController extends GetxController {
           'Loaded existing Moov account ID: ${_moovAccountId.value}',
         );
       } else {
-        // Try to create new Moov account, but don't fail if it doesn't work
-        try {
-          await _createMoovAccount(user);
-        } catch (e) {
-          AppLogger.log('Warning: Could not create Moov account: $e');
-          // Continue without Moov account - user can still use other features
-        }
+        AppLogger.log(
+          'No existing Moov account found - will create on demand if needed',
+        );
+        // Don't create Moov account automatically
+        // It will be created only when specifically needed for Moov payments
       }
     } catch (e) {
       AppLogger.log('Error loading Moov account ID: $e');
-      // Don't throw error - allow app to continue
+      // Don't throw error - allow app to continue without Moov
     }
   }
 
@@ -419,15 +419,13 @@ class SubscriptionController extends GetxController {
 
   // Subscribe to the premium plan
   Future<bool> subscribeToPremium() async {
-    return await _subscribeWithMoov();
+    return await _subscribeWithPlatformPayments();
   }
 
-  // Subscribe with Moov and platform payments
-  Future<bool> _subscribeWithMoov() async {
-    if (_moovAccountId.value.isEmpty) {
-      Get.snackbar('Error', 'Account not found');
-      return false;
-    }
+  // Subscribe with platform payments (Google Pay/Apple Pay)
+  Future<bool> _subscribeWithPlatformPayments() async {
+    // Platform payments don't require Moov account
+    // Moov account creation is now optional
 
     _isLoading.value = true;
     try {
@@ -450,7 +448,7 @@ class SubscriptionController extends GetxController {
 
       if (paymentResult != null && paymentResult['success'] == true) {
         // Store subscription in Firestore
-        await _storeSubscriptionData({
+        final subscriptionData = {
           'subscriptionId': subscriptionId,
           'planId': singlePlanId,
           'status': 'active',
@@ -458,12 +456,23 @@ class SubscriptionController extends GetxController {
           'currency': plan['currency'],
           'interval': plan['interval'],
           'userId': FirebaseAuth.instance.currentUser?.uid,
-          'moovAccountId': _moovAccountId.value,
           'paymentMethod': paymentResult['paymentMethod'] ?? 'platform_pay',
           'createdAt': FieldValue.serverTimestamp(),
           'currentPeriodStart': DateTime.now(),
           'currentPeriodEnd': DateTime.now().add(Duration(days: 30)),
-        });
+        };
+
+        // Only add moovAccountId if it exists (optional for platform payments)
+        if (_moovAccountId.value.isNotEmpty) {
+          subscriptionData['moovAccountId'] = _moovAccountId.value;
+        }
+
+        await _storeSubscriptionData(subscriptionData);
+
+        // Immediately mark user as active
+        _hasActiveSubscription.value = true;
+        _subscriptionStatus.value = 'active';
+        _currentPlan.value = singlePlanId;
 
         // Force refresh subscription status in service first
         await _subscriptionService.isUserSubscribed(forceRefresh: true);
@@ -471,17 +480,15 @@ class SubscriptionController extends GetxController {
         // Then refresh controller data
         await _initializeSubscriptionData();
 
-        // Update local status immediately
-        _hasActiveSubscription.value = true;
-        _subscriptionStatus.value = 'active';
-        _currentPlan.value = singlePlanId;
-
         AppLogger.log(
           'SubscriptionController: Subscription activated successfully',
         );
 
         Get.back(); // Go back to previous screen
-        Get.snackbar('Success', 'Welcome to Super Payments! 🎉');
+        Get.snackbar(
+          'Success',
+          'Welcome to Super Payments! All features are now available. 🎉',
+        );
         return true;
       }
 
@@ -624,28 +631,37 @@ class SubscriptionController extends GetxController {
   /// Force refresh subscription status - called when subscription state changes
   Future<void> refreshSubscriptionStatus() async {
     try {
-      AppLogger.log('SubscriptionController: Force refreshing subscription status...');
-      
+      AppLogger.log(
+        'SubscriptionController: Force refreshing subscription status...',
+      );
+
       // Force refresh from subscription service
-      final serviceStatus = await _subscriptionService.isUserSubscribed(forceRefresh: true);
-      
+      final serviceStatus = await _subscriptionService.isUserSubscribed(
+        forceRefresh: true,
+      );
+
       // Update local state immediately
       _hasActiveSubscription.value = serviceStatus;
       _subscriptionStatus.value = serviceStatus ? 'active' : 'inactive';
-      
+
       if (serviceStatus) {
         _currentPlan.value = singlePlanId;
-        AppLogger.log('SubscriptionController: Subscription status refreshed - ACTIVE');
+        AppLogger.log(
+          'SubscriptionController: Subscription status refreshed - ACTIVE',
+        );
       } else {
         _currentPlan.value = '';
-        AppLogger.log('SubscriptionController: Subscription status refreshed - INACTIVE');
+        AppLogger.log(
+          'SubscriptionController: Subscription status refreshed - INACTIVE',
+        );
       }
-      
-      // Also refresh full subscription data to ensure consistency
-      await _checkSubscriptionStatus();
-      
+
+      // Don't call _checkSubscriptionStatus() here as it would override with Firebase logic
+      // The service status is the authoritative source for local validation
     } catch (e) {
-      AppLogger.log('SubscriptionController: Error refreshing subscription status: $e');
+      AppLogger.log(
+        'SubscriptionController: Error refreshing subscription status: $e',
+      );
     }
   }
 
@@ -716,7 +732,7 @@ class SubscriptionController extends GetxController {
   void _startPeriodicStatusCheck() {
     // Check subscription status every 30 seconds when app is active
     _statusCheckTimer = Timer.periodic(Duration(seconds: 30), (timer) {
-      _checkSubscriptionStatus();
+      refreshSubscriptionStatus();
     });
   }
 

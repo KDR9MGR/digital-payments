@@ -1,5 +1,5 @@
 import 'package:http/http.dart' as http;
-import '/utils/app_logger.dart';
+import '../utils/app_logger.dart';
 import 'dart:convert';
 import '../config/moov_config.dart';
 

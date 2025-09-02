@@ -29,55 +29,25 @@ class GoPremiumWidget extends StatefulWidget {
 }
 
 class _GoPremiumWidgetState extends State<GoPremiumWidget> {
-  final SubscriptionController _subscriptionController = Get.find<SubscriptionController>();
-  final SubscriptionService _subscriptionService = Get.find<SubscriptionService>();
-  bool _hasActiveSubscription = false;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkSubscriptionStatus();
-  }
-
-  Future<void> _checkSubscriptionStatus() async {
-    try {
-      // Check both service and controller for subscription status
-      final serviceHasSubscription = await _subscriptionService.isUserSubscribed();
-      final controllerHasSubscription = _subscriptionController.hasActiveSubscription;
-      
-      final hasSubscription = serviceHasSubscription || controllerHasSubscription;
-      
-      if (mounted) {
-        setState(() {
-          _hasActiveSubscription = hasSubscription;
-          _isLoading = false;
-        });
-      }
-      
-      AppLogger.log('GoPremiumWidget: Subscription check - Service: $serviceHasSubscription, Controller: $controllerHasSubscription, Final: $hasSubscription');
-    } catch (e) {
-      AppLogger.log('GoPremiumWidget: Error checking subscription: $e');
-      if (mounted) {
-        setState(() {
-          _hasActiveSubscription = _subscriptionController.hasActiveSubscription;
-          _isLoading = false;
-        });
-      }
-    }
-  }
+  final SubscriptionController _subscriptionController =
+      Get.find<SubscriptionController>();
+  final SubscriptionService _subscriptionService =
+      Get.find<SubscriptionService>();
 
   @override
   Widget build(BuildContext context) {
-    // Hide widget if user has active subscription
-    if (_hasActiveSubscription) {
-      return const SizedBox.shrink();
-    }
-    
-    // Show loading state briefly
-    if (_isLoading) {
-      return const SizedBox.shrink();
-    }
+    // Use Obx for reactive updates when subscription status changes
+    return Obx(() {
+      // Hide widget if user has active subscription
+      if (_subscriptionController.hasActiveSubscription) {
+        return const SizedBox.shrink();
+      }
+
+      return _buildPremiumWidget(context);
+    });
+  }
+
+  Widget _buildPremiumWidget(BuildContext context) {
     return Container(
       margin: widget.margin ?? EdgeInsets.all(Dimensions.marginSize),
       decoration: BoxDecoration(
@@ -494,43 +464,25 @@ class GoPremiumBanner extends StatefulWidget {
 }
 
 class _GoPremiumBannerState extends State<GoPremiumBanner> {
-  final SubscriptionController _subscriptionController = Get.find<SubscriptionController>();
-  final SubscriptionService _subscriptionService = Get.find<SubscriptionService>();
-  bool _isLoading = true;
-  bool _hasActiveSubscription = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkSubscriptionStatus();
-  }
-
-  Future<void> _checkSubscriptionStatus() async {
-    try {
-      // Check with both controller and service for most accurate status
-      final controllerStatus = _subscriptionController.hasActiveSubscription;
-      final serviceStatus = await _subscriptionService.isUserSubscribed();
-      
-      setState(() {
-        _hasActiveSubscription = controllerStatus || serviceStatus;
-        _isLoading = false;
-      });
-    } catch (e) {
-      // Fallback to controller status if service check fails
-      setState(() {
-        _hasActiveSubscription = _subscriptionController.hasActiveSubscription;
-        _isLoading = false;
-      });
-    }
-  }
+  final SubscriptionController _subscriptionController =
+      Get.find<SubscriptionController>();
+  final SubscriptionService _subscriptionService =
+      Get.find<SubscriptionService>();
 
   @override
   Widget build(BuildContext context) {
-    // Hide banner if user has active subscription or while loading
-    if (_isLoading || _hasActiveSubscription) {
-      return SizedBox.shrink();
-    }
+    // Use Obx for reactive updates when subscription status changes
+    return Obx(() {
+      // Hide banner if user has active subscription
+      if (_subscriptionController.hasActiveSubscription) {
+        return const SizedBox.shrink();
+      }
 
+      return _buildBannerWidget(context);
+    });
+  }
+
+  Widget _buildBannerWidget(BuildContext context) {
     return GestureDetector(
       onTap: widget.onTap ?? () => Get.toNamed(Routes.subscriptionScreen),
       child: Container(
