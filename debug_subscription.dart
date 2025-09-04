@@ -6,7 +6,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'lib/services/subscription_service.dart';
 import 'lib/config/subscription_config.dart';
-import 'lib/utils/app_logger.dart';
 
 /// Debug script to check subscription status and identify issues
 void main() async {

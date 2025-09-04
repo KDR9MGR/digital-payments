@@ -80,9 +80,9 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
 
   Widget _subscriptionStatusWidget(UnifiedSubscriptionController controller) {
     return Obx(() {
-      final isActive = controller.isSubscriptionActive.value;
-      final isExpiringSoon = controller.isSubscriptionExpiringSoon();
-      final isExpired = controller.isSubscriptionExpired();
+      final bool isActive = controller.isSubscriptionActive.value;
+      final bool isExpiringSoon = controller.isSubscriptionExpiringSoon();
+      final bool isExpired = controller.isSubscriptionExpired();
 
       Color statusColor;
       String statusTitle;
@@ -144,65 +144,8 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
     });
   }
 
-  Widget _platformInfoWidget(UnifiedSubscriptionController controller) {
-    return Obx(() {
-      final platform = controller.currentPlatform.value;
-      final platformName =
-          platform == 'ios'
-              ? 'Apple App Store'
-              : platform == 'android'
-              ? 'Google Play Store'
-              : 'Unknown';
-      final platformIcon =
-          platform == 'ios'
-              ? Icons.apple
-              : platform == 'android'
-              ? Icons.android
-              : Icons.device_unknown;
-
-      return Container(
-        padding: EdgeInsets.all(Dimensions.defaultPaddingSize * 1.2),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20.r),
-          border: Border.all(
-            color: Colors.grey.withValues(alpha: 0.1),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Icon(platformIcon, size: 32.r, color: CustomColor.primaryColor),
-            SizedBox(width: Dimensions.widthSize),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Platform', style: CustomStyle.cardSubtitleStyle),
-                  Text(
-                    platformName,
-                    style: CustomStyle.commonTextTitle.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
   Widget _currentPlanWidget(UnifiedSubscriptionController controller) {
-    final plan = controller.getSubscriptionPlan();
+    final Map<String, dynamic> plan = controller.getSubscriptionPlan();
 
     return Container(
       padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
@@ -280,8 +223,8 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
 
   Widget _subscriptionDetailsWidget(UnifiedSubscriptionController controller) {
     return Obx(() {
-      final details = controller.subscriptionDetails.value;
-      final expiryDate = controller.expiryDate.value;
+      final Map<String, dynamic> details = controller.subscriptionDetails;
+      final DateTime? expiryDate = controller.expiryDate.value;
 
       return Container(
         padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
@@ -399,7 +342,7 @@ class UnifiedSubscriptionScreen extends StatelessWidget {
   }
 
   Widget _noSubscriptionWidget(UnifiedSubscriptionController controller) {
-    final plan = controller.getSubscriptionPlan();
+    final Map<String, dynamic> plan = controller.getSubscriptionPlan();
 
     return Container(
       padding: EdgeInsets.all(Dimensions.defaultPaddingSize * 1.5),

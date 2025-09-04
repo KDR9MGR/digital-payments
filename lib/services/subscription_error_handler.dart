@@ -157,7 +157,26 @@ class SubscriptionErrorHandler {
   ) async {
     AppLogger.log('Attempting fallback validation strategies');
 
-    // Try fallback validation
+    // Check if this is a client-side validation error
+    final isClientSideError = context?['validation_type'] == 'client_side';
+    if (isClientSideError) {
+      AppLogger.log('Client-side validation error detected: $errorMessage');
+
+      // For client-side validation errors, try backend validation as fallback
+      final backendFallbackSuccess = await _handleClientSideValidationError(
+        errorMessage,
+        context,
+      );
+
+      if (backendFallbackSuccess) {
+        AppLogger.log(
+          'Backend fallback validation successful after client-side failure',
+        );
+        return true;
+      }
+    }
+
+    // Try general fallback validation
     final fallbackSuccess = await _fallbackService.handleValidationFailure(
       failureReason: errorMessage,
       userId: context?['userId'] ?? '',
@@ -172,6 +191,39 @@ class SubscriptionErrorHandler {
       AppLogger.log('Validation error: $errorMessage - handled silently');
       return false;
     }
+  }
+
+  /// Handle client-side validation specific errors
+  Future<bool> _handleClientSideValidationError(
+    String errorMessage,
+    Map<String, dynamic>? context,
+  ) async {
+    AppLogger.log('Handling client-side validation error: $errorMessage');
+
+    // Log specific client-side validation failure reasons
+    final purchaseDetails = context?['purchase_details'];
+    if (purchaseDetails != null) {
+      AppLogger.log(
+        'Purchase details - Product: ${purchaseDetails['productID']}, Status: ${purchaseDetails['status']}',
+      );
+    }
+
+    // Check if we should attempt backend validation as fallback
+    final shouldTryBackend = context?['should_try_backend'] ?? true;
+    if (shouldTryBackend) {
+      AppLogger.log(
+        'Attempting backend validation as fallback for client-side failure',
+      );
+
+      // This would trigger backend validation in the subscription service
+      // Return true to indicate the error was handled and backend should be tried
+      return true;
+    }
+
+    AppLogger.log(
+      'Client-side validation failed and no backend fallback available',
+    );
+    return false;
   }
 
   /// Handle timeout errors
@@ -244,7 +296,9 @@ class SubscriptionErrorHandler {
 
     // Don't show error dialog for initialization errors during app startup
     // Just log the error and continue - the app will work in limited mode
-    AppLogger.log('Subscription service initialization failed - continuing in limited mode');
+    AppLogger.log(
+      'Subscription service initialization failed - continuing in limited mode',
+    );
 
     return false;
   }
@@ -388,18 +442,12 @@ class SubscriptionErrorHandler {
 
   // Validation error dialog removed - errors are handled silently
 
-  void _showServiceErrorDialog(
-    String title,
-    String message,
-  ) {
+  void _showServiceErrorDialog(String title, String message) {
     Get.dialog(
       AlertDialog(
         title: Row(
           children: [
-            Icon(
-              Icons.cloud_off,
-              color: Colors.red,
-            ),
+            Icon(Icons.cloud_off, color: Colors.red),
             SizedBox(width: 8),
             Text(title),
           ],

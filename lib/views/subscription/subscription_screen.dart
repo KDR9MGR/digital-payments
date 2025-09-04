@@ -389,15 +389,8 @@ class SubscriptionScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    IconButton(
-                      onPressed:
-                          () => controller.deletePaymentMethod(method['id']),
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
-                        size: 20.r,
-                      ),
-                    ),
+                    // Delete payment method removed - subscriptions use in-app purchases only
+                    // IconButton for deleting payment methods is no longer needed
                   ],
                 ),
               ),
@@ -410,7 +403,7 @@ class SubscriptionScreen extends StatelessWidget {
                 margin: EdgeInsets.symmetric(horizontal: 0, vertical: 8),
                 padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
+                  color: Colors.orange.withValues(alpha: 0.1),
                   border: Border.all(color: Colors.orange),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -653,53 +646,12 @@ class SubscriptionScreen extends StatelessWidget {
             SizedBox(height: Dimensions.heightSize * 2),
           ],
 
-          // Payment options - Google Pay and Apple Pay ONLY
+          // Payment options - In-app purchases only
           if (!isLoading) ...[
-            // Google Pay button (Android)
-            if (controller.googlePayAvailable) ...[
+            // In-app purchase button
+            if (true) ...[
               _buildGooglePayButton(controller, plan),
               SizedBox(height: Dimensions.heightSize),
-            ],
-
-            // Apple Pay button (iOS)
-            if (controller.applePayAvailable) ...[
-              _buildApplePayButton(controller, plan),
-              SizedBox(height: Dimensions.heightSize),
-            ],
-
-            // No payment method available message
-            if (!controller.googlePayAvailable &&
-                !controller.applePayAvailable) ...[
-              Container(
-                padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(Dimensions.radius),
-                  border: Border.all(color: Colors.orange),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.payment_outlined,
-                      color: Colors.orange,
-                      size: 32.r,
-                    ),
-                    SizedBox(height: Dimensions.heightSize),
-                    Text(
-                      'Payment Not Available',
-                      style: CustomStyle.commonTextTitle.copyWith(
-                        color: Colors.orange,
-                      ),
-                    ),
-                    SizedBox(height: Dimensions.heightSize * 0.5),
-                    Text(
-                      'Google Pay or Apple Pay is required for subscriptions. Please ensure you have a payment method set up in your device settings.',
-                      style: CustomStyle.commonSubTextTitle,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
             ],
           ] else ...[
             // Loading state
@@ -761,43 +713,6 @@ class SubscriptionScreen extends StatelessWidget {
             Flexible(
               child: Text(
                 'Pay with Google Pay',
-                style: CustomStyle.commonTextTitle.copyWith(
-                  color: Colors.white,
-                  fontSize: Dimensions.mediumTextSize,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildApplePayButton(
-    SubscriptionController controller,
-    Map<String, dynamic>? plan,
-  ) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50.h,
-      child: ElevatedButton(
-        onPressed: () => controller.processApplePaySubscription(),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Dimensions.radius),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.apple, color: Colors.white, size: 24.r),
-            SizedBox(width: Dimensions.widthSize),
-            Flexible(
-              child: Text(
-                'Pay with Apple Pay',
                 style: CustomStyle.commonTextTitle.copyWith(
                   color: Colors.white,
                   fontSize: Dimensions.mediumTextSize,

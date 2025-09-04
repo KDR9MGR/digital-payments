@@ -57,12 +57,22 @@ void main() async {
         }
 
         // Initialize storage with timeout
+        bool storageInitialized = false;
         try {
           await GetStorage.init().timeout(const Duration(seconds: 5));
+          storageInitialized = true;
           AppLogger.log('Storage initialized successfully');
         } catch (e) {
           AppLogger.log('Storage initialization error: $e');
+          AppLogger.log('Warning: Firebase cache services may not work properly without storage');
           // Continue without storage if it fails
+        }
+        
+        // Store storage status for Firebase services
+        if (storageInitialized) {
+          AppLogger.log('Storage available for Firebase cache services');
+        } else {
+          AppLogger.log('Storage unavailable - Firebase services will use fallback mode');
         }
 
         // Initialize services in background (non-blocking)

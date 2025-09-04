@@ -1,6 +1,7 @@
 import '/utils/app_logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:xpay/data/user_model.dart';
 import '../../services/firebase_batch_service.dart';
 
@@ -38,11 +39,11 @@ class LoginViewModel extends BaseViewModel {
         await saveUserDetails(user);
         return '';
       } else {
-        debugPrint('User is null');
+        if (kDebugMode) debugPrint('User is null');
         return 'User is null';
       }
     } on FirebaseAuthException catch (e) {
-      debugPrint('signInError: $e');
+      if (kDebugMode) debugPrint('signInError: $e');
       if (e.code == 'email-already-in-use') {
         return 'The email address is already in use.';
       } else if (e.code == 'user-disabled') {
@@ -65,7 +66,7 @@ class LoginViewModel extends BaseViewModel {
         return 'Error signing in: ${e.message}';
       }
     } catch (e) {
-      debugPrint('Error signing in: $e');
+      if (kDebugMode) debugPrint('Error signing in: $e');
       return 'Error signing in: $e';
     } finally {
       notifyListeners();
@@ -82,7 +83,7 @@ class LoginViewModel extends BaseViewModel {
 
       _user = null;
     } catch (error) {
-      debugPrint('Sign out error: $error');
+      if (kDebugMode) debugPrint('Sign out error: $error');
     } finally {
       notifyListeners();
     }
@@ -102,11 +103,11 @@ class LoginViewModel extends BaseViewModel {
       if (_user != null) {
         return '';
       } else {
-        debugPrint('User is null');
+        if (kDebugMode) debugPrint('User is null');
         return 'User is null';
       }
     } on FirebaseAuthException catch (e) {
-      debugPrint('signInError: $e');
+      if (kDebugMode) debugPrint('signInError: $e');
       if (e.code == 'email-already-in-use') {
         return 'The email address is already in use.';
       } else if (e.code == 'user-disabled') {
@@ -129,7 +130,7 @@ class LoginViewModel extends BaseViewModel {
         return 'Error signing in: ${e.message}';
       }
     } catch (e) {
-      debugPrint('Error signing in: $e');
+      if (kDebugMode) debugPrint('Error signing in: $e');
       return 'Error signing in: $e';
     } finally {
       notifyListeners();
@@ -138,19 +139,21 @@ class LoginViewModel extends BaseViewModel {
 
   Future<String> resetPassword(String email) async {
     if (_auth == null) {
-      debugPrint('Firebase Auth is not initialized');
+      if (kDebugMode) debugPrint('Firebase Auth is not initialized');
       return 'Firebase Auth is not initialized. Please restart the app.';
     }
 
-    debugPrint('Attempting to send password reset email to: $email');
+    if (kDebugMode) debugPrint('Attempting to send password reset email to: $email');
 
     try {
       await _auth!.sendPasswordResetEmail(email: email);
-      debugPrint('Password reset email sent successfully to: $email');
+      if (kDebugMode) debugPrint('Password reset email sent successfully to: $email');
     } on FirebaseAuthException catch (e) {
-      debugPrint(
-        'FirebaseAuthException during password reset: ${e.code} - ${e.message}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          'FirebaseAuthException during password reset: ${e.code} - ${e.message}',
+        );
+      }
       if (e.code == 'user-not-found') {
         return 'No user found for that email address.';
       } else if (e.code == 'invalid-email') {
@@ -164,11 +167,13 @@ class LoginViewModel extends BaseViewModel {
       } else if (e.code == 'missing-email') {
         return 'Please enter an email address.';
       } else {
-        debugPrint('Unhandled FirebaseAuthException: ${e.code} - ${e.message}');
+        if (kDebugMode) {
+          debugPrint('Unhandled FirebaseAuthException: ${e.code} - ${e.message}');
+        }
         return 'Error sending password reset email: ${e.message}';
       }
     } catch (e) {
-      debugPrint('General error during password reset: $e');
+      if (kDebugMode) debugPrint('General error during password reset: $e');
       return 'Error sending password reset email: $e';
     } finally {
       notifyListeners();
@@ -191,7 +196,7 @@ class LoginViewModel extends BaseViewModel {
       );
       await _batchService.flushBatch();
     } catch (error) {
-      debugPrint('Failed to add user: $error');
+      if (kDebugMode) debugPrint('Failed to add user: $error');
     }
   }
 }

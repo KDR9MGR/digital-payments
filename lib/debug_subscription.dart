@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:get_storage/get_storage.dart';
+import 'dart:convert';
 
 import 'services/subscription_service.dart';
 import 'services/auth_service.dart';
@@ -23,6 +24,9 @@ void main() async {
     Get.put(AuthService());
     Get.put(SubscriptionService());
     Get.put(SubscriptionController());
+
+    // Setup test purchase data for Android
+    await setupTestPurchaseData();
 
     await debugSubscriptionStatus();
   } catch (e) {
@@ -116,4 +120,35 @@ Future<void> debugSubscriptionStatus() async {
   }
 
   print('\n=== DEBUG COMPLETE ===\n');
+}
+
+Future<void> setupTestPurchaseData() async {
+  print('Setting up test purchase data for Android...');
+
+  final storage = GetStorage();
+
+  // Clear existing client validation data
+  await storage.remove('client_validated_subscription');
+  await storage.remove('client_validation_date');
+  await storage.remove('has_active_subscription');
+  await storage.remove('subscription_expiry');
+
+  // Create test purchase data
+  final testPurchaseData = {
+    'purchaseToken': 'test_purchase_token_android_12345',
+    'productId': '07071990',
+    'purchaseTime':
+        DateTime.now().subtract(Duration(days: 2)).millisecondsSinceEpoch,
+  };
+
+  // Store the test purchase data
+  await storage.write('last_purchase_data', json.encode(testPurchaseData));
+
+  print('Test purchase data stored:');
+  print('  - Purchase Token: ${testPurchaseData['purchaseToken']}');
+  print('  - Product ID: ${testPurchaseData['productId']}');
+  print(
+    '  - Purchase Time: ${DateTime.fromMillisecondsSinceEpoch(testPurchaseData['purchaseTime'] as int)}',
+  );
+  print('Test data setup complete.\n');
 }

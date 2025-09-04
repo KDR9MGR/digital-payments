@@ -8,9 +8,6 @@ import '../../data/user_model.dart';
 import '../../routes/routes.dart';
 import '../../utils/storage_service.dart';
 import '../auth/user_provider.dart';
-import '../../controller/subscription_controller.dart';
-import '../../services/subscription_service.dart';
-import '../../screens/paywall_screen.dart';
 
 import '../../utils/custom_color.dart';
 import '../../utils/strings.dart';

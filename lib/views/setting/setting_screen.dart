@@ -122,8 +122,8 @@ class SettingsScreen extends StatelessWidget {
 
 
   Widget _debugErrorManagementWidget() {
-    final errorStats = ErrorDebugHelper.getErrorStats();
-    final totalErrors = errorStats['totalErrors'] ?? 0;
+    final Map<String, dynamic> errorStats = ErrorDebugHelper.getErrorStats();
+    final int totalErrors = errorStats['totalErrors'] ?? 0;
 
     // Only show if there are errors to clear
     if (totalErrors == 0) {

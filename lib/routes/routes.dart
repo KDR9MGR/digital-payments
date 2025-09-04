@@ -266,7 +266,7 @@ class Routes {
   static const String subscriptionPlansScreen = '/subscriptionPlansScreen';
   static const String errorDebugScreen = '/errorDebugScreen';
 
-  static var list = [
+  static List<GetPage> list = [
     GetPage(
       name: splashScreen,
       page: () => const SplashScreen(),

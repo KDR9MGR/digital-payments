@@ -8,8 +8,6 @@ import 'package:xpay/views/auth/user_provider.dart';
 import 'package:xpay/views/auth/wallet_view_model.dart';
 
 import '../../controller/money_out_controller.dart';
-import '../../controller/subscription_controller.dart';
-import '../../services/subscription_error_handler.dart';
 import '../../utils/custom_color.dart';
 import '../../utils/custom_style.dart';
 import '../../utils/dimensions.dart';
@@ -111,22 +109,16 @@ class _MoneyOutScreenState extends State<MoneyOutScreen>
 
   // body widget contain all the widgets
   ListView _bodyWidget(BuildContext context) {
-    final subscriptionController = Get.find<SubscriptionController>();
     return ListView(
       shrinkWrap: true,
       children: [
         _infoInputWidget(context),
         _walletInfoWidget(context),
-        // Show Go Premium widget if user doesn't have active subscription
-        Obx(() {
-          if (!subscriptionController.hasActiveSubscription) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: GoPremiumBanner(showCloseButton: false),
-            );
-          }
-          return SizedBox.shrink();
-        }),
+        // Show Go Premium widget - now shows Premium Active when user has subscription
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: GoPremiumBanner(showCloseButton: false),
+        ),
         SizedBox(height: Dimensions.heightSize * 2),
         _buttonWidget(context),
         SizedBox(height: Dimensions.heightSize * 2),
@@ -524,12 +516,33 @@ class _MoneyOutScreenState extends State<MoneyOutScreen>
               } catch (e) {
                 Navigator.pop(context); // Dismiss loading dialog on error
 
-                // Use proper error handling instead of showing raw exception
-                await SubscriptionErrorHandler().handleSubscriptionError(
-                  errorType: 'payment_error',
-                  errorMessage: e.toString(),
-                  context: {'screen': 'money_out', 'action': 'send_money'},
-                );
+                // Handle P2P transfer errors appropriately
+                String errorMessage = e.toString();
+                if (errorMessage.contains('Insufficient balance')) {
+                  Utils.showDialogMessage(
+                    context,
+                    'Insufficient Balance',
+                    'You do not have enough balance to complete this transfer.',
+                  );
+                } else if (errorMessage.contains('not found')) {
+                  Utils.showDialogMessage(
+                    context,
+                    'Recipient Not Found',
+                    'The recipient email address was not found. Please check and try again.',
+                  );
+                } else if (errorMessage.contains('Transfer failed')) {
+                  Utils.showDialogMessage(
+                    context,
+                    'Transfer Failed',
+                    'The money transfer could not be completed. Please try again later.',
+                  );
+                } else {
+                  Utils.showDialogMessage(
+                    context,
+                    'Transfer Error',
+                    'An error occurred while processing your transfer. Please try again.',
+                  );
+                }
               }
             }
           },

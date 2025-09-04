@@ -153,7 +153,9 @@ class ChangeLanguageScreen extends StatelessWidget {
               value: buttonIndex,
               groupValue: _controller.selectedLanguage.value,
               onChanged: (value) {
-                _controller.onChangeLanguage(value);
+                if (value != null) {
+                  _controller.onChangeLanguage(value);
+                }
               },
             ),
           ),

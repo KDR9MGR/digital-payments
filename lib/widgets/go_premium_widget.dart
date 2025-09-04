@@ -7,8 +7,6 @@ import '../routes/routes.dart';
 import '../screens/paywall_screen.dart';
 import '../controller/subscription_controller.dart';
 import '../services/platform_payment_service.dart';
-import '../services/subscription_service.dart';
-import '../utils/app_logger.dart';
 
 class GoPremiumWidget extends StatefulWidget {
   final bool showCloseButton;
@@ -31,8 +29,6 @@ class GoPremiumWidget extends StatefulWidget {
 class _GoPremiumWidgetState extends State<GoPremiumWidget> {
   final SubscriptionController _subscriptionController =
       Get.find<SubscriptionController>();
-  final SubscriptionService _subscriptionService =
-      Get.find<SubscriptionService>();
 
   @override
   Widget build(BuildContext context) {
@@ -53,15 +49,15 @@ class _GoPremiumWidgetState extends State<GoPremiumWidget> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            CustomColor.primaryColor.withOpacity(0.1),
-            CustomColor.primaryColor.withOpacity(0.05),
+            CustomColor.primaryColor.withValues(alpha: 0.1),
+            CustomColor.primaryColor.withValues(alpha: 0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(Dimensions.radius),
         border: Border.all(
-          color: CustomColor.primaryColor.withOpacity(0.3),
+          color: CustomColor.primaryColor.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -113,7 +109,7 @@ class _GoPremiumWidgetState extends State<GoPremiumWidget> {
                   Text(
                     'Unlock premium features for just \$1.99/month',
                     style: CustomStyle.commonTextTitle.copyWith(
-                      color: CustomColor.primaryTextColor.withOpacity(0.8),
+                      color: CustomColor.primaryTextColor.withValues(alpha: 0.8),
                     ),
                   ),
                   SizedBox(height: 8.0),
@@ -212,7 +208,7 @@ class _GoPremiumWidgetState extends State<GoPremiumWidget> {
                 icon: Icon(
                   Icons.close,
                   size: 18,
-                  color: CustomColor.primaryTextColor.withOpacity(0.6),
+                  color: CustomColor.primaryTextColor.withValues(alpha: 0.6),
                 ),
                 padding: EdgeInsets.zero,
                 constraints: BoxConstraints(minWidth: 24, minHeight: 24),
@@ -250,8 +246,8 @@ class _GoPremiumWidgetState extends State<GoPremiumWidget> {
                         child: Text(
                           feature,
                           style: CustomStyle.commonSubTextTitle.copyWith(
-                            color: CustomColor.primaryTextColor.withOpacity(
-                              0.7,
+                            color: CustomColor.primaryTextColor.withValues(
+                              alpha: 0.7,
                             ),
                           ),
                         ),
@@ -310,7 +306,7 @@ class _GoPremiumWidgetState extends State<GoPremiumWidget> {
                 Container(
                   padding: EdgeInsets.all(12.0),
                   decoration: BoxDecoration(
-                    color: CustomColor.primaryColor.withOpacity(0.1),
+                    color: CustomColor.primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6.0),
                   ),
                   child: Row(
@@ -405,7 +401,7 @@ class _GoPremiumWidgetState extends State<GoPremiumWidget> {
                       Container(
                         padding: EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: CustomColor.primaryColor.withOpacity(0.1),
+                          color: CustomColor.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
@@ -429,8 +425,8 @@ class _GoPremiumWidgetState extends State<GoPremiumWidget> {
                             Text(
                               feature['description'] as String,
                               style: CustomStyle.commonSubTextTitle.copyWith(
-                                color: CustomColor.primaryTextColor.withOpacity(
-                                  0.7,
+                                color: CustomColor.primaryTextColor.withValues(
+                                  alpha: 0.7,
                                 ),
                               ),
                             ),
@@ -466,34 +462,32 @@ class GoPremiumBanner extends StatefulWidget {
 class _GoPremiumBannerState extends State<GoPremiumBanner> {
   final SubscriptionController _subscriptionController =
       Get.find<SubscriptionController>();
-  final SubscriptionService _subscriptionService =
-      Get.find<SubscriptionService>();
 
   @override
   Widget build(BuildContext context) {
     // Use Obx for reactive updates when subscription status changes
     return Obx(() {
-      // Hide banner if user has active subscription
-      if (_subscriptionController.hasActiveSubscription) {
-        return const SizedBox.shrink();
-      }
-
       return _buildBannerWidget(context);
     });
   }
 
   Widget _buildBannerWidget(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap ?? () => Get.toNamed(Routes.subscriptionScreen),
-      child: Container(
+    final hasActiveSubscription = _subscriptionController.hasActiveSubscription;
+    
+    final containerWidget = Container(
         margin: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
         padding: EdgeInsets.all(12.0),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              CustomColor.primaryColor,
-              CustomColor.primaryColor.withOpacity(0.8),
-            ],
+            colors: hasActiveSubscription
+                ? [
+                    Colors.green,
+                    Colors.green.withValues(alpha: 0.8),
+                  ]
+                : [
+                    CustomColor.primaryColor,
+                    CustomColor.primaryColor.withValues(alpha: 0.8),
+                  ],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
@@ -503,7 +497,11 @@ class _GoPremiumBannerState extends State<GoPremiumBanner> {
           children: [
             Row(
               children: [
-                Icon(Icons.lock_open, color: Colors.white, size: 20),
+                Icon(
+                  hasActiveSubscription ? Icons.verified : Icons.lock_open,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 SizedBox(width: 12.0),
                 Expanded(
                   child: Column(
@@ -511,22 +509,41 @@ class _GoPremiumBannerState extends State<GoPremiumBanner> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Unlock Premium Features',
+                        hasActiveSubscription ? 'Premium Active' : 'Unlock Premium Features',
                         style: CustomStyle.commonTextTitle.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        'Just \$1.99/month • Tap to unlock',
+                        hasActiveSubscription
+                            ? 'Enjoying all premium features • \$1.99/month'
+                            : 'Just \$1.99/month • Tap to unlock',
                         style: CustomStyle.commonSubTextTitle.copyWith(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                         ),
                       ),
                     ],
                   ),
                 ),
-                Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                if (hasActiveSubscription)
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'ACTIVE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                else
+                  Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
               ],
             ),
             if (widget.showCloseButton)
@@ -538,7 +555,7 @@ class _GoPremiumBannerState extends State<GoPremiumBanner> {
                   icon: Icon(
                     Icons.close,
                     size: 16,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                   ),
                   padding: EdgeInsets.zero,
                   constraints: BoxConstraints(minWidth: 20, minHeight: 20),
@@ -546,7 +563,16 @@ class _GoPremiumBannerState extends State<GoPremiumBanner> {
               ),
           ],
         ),
-      ),
-    );
+      );
+    
+    // Return the container wrapped with GestureDetector only if subscription is not active
+    if (hasActiveSubscription) {
+      return containerWidget;
+    } else {
+      return GestureDetector(
+        onTap: widget.onTap ?? () => Get.toNamed(Routes.subscriptionScreen),
+        child: containerWidget,
+      );
+    }
   }
 }

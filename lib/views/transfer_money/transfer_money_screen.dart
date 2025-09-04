@@ -13,6 +13,7 @@ import '../../utils/utils.dart';
 import '../../widgets/buttons/primary_button.dart';
 import '../../widgets/inputs/amount_input_widget.dart';
 import '../../widgets/inputs/dropdown_widget.dart';
+import '../../widgets/inputs/validated_dropdown_widget.dart';
 import '../../widgets/inputs/secondary_text_input_widget.dart';
 import '../../widgets/primary_appbar.dart';
 import '../../widgets/wallet_info_widget.dart';
@@ -110,7 +111,7 @@ class _TransferMoneyScreenState extends State<TransferMoneyScreen>
       children: [
         _infoInputWidget(context),
         _walletInfoWidget(context),
-        // Show Go Premium widget if user doesn't have active subscription
+        // Show Go Premium widget only if user doesn't have active subscription
         Obx(() {
           if (!subscriptionController.hasActiveSubscription) {
             return Padding(
@@ -313,6 +314,44 @@ class _TransferMoneyScreenState extends State<TransferMoneyScreen>
                   suffixIcon: _amountButton(context),
                 ),
               ),
+              const SizedBox(height: 24),
+
+              // Payment Method Selection
+              _buildModernLabel('Payment Method'),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Obx(() {
+                  // Ensure payment methods are available
+                  controller.refreshPaymentMethods();
+                  return ValidatedDropDownInputWidget(
+                    items: controller.paymentMethods,
+                    color: Colors.transparent,
+                    hintText: 'Select Payment Method',
+                    value: controller.getCurrentPaymentMethod().isEmpty 
+                        ? null 
+                        : controller.getCurrentPaymentMethod(),
+                    onChanged: (value) {
+                      controller.selectedPaymentMethod.value = value ?? '';
+                    },
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please select a payment method';
+                      }
+                      if (!controller.paymentMethods.contains(value)) {
+                        return 'Invalid payment method selected';
+                      }
+                      return null;
+                    },
+                  );
+                }),
+              ),
               const SizedBox(height: 16),
 
               // Limit and charge info
@@ -456,15 +495,17 @@ class _TransferMoneyScreenState extends State<TransferMoneyScreen>
             ),
           ],
         ),
-        child: PrimaryButton(
-          title: Strings.transferNow.tr,
+        child: Obx(() => PrimaryButton(
+          title: controller.isProcessingTransfer.value 
+              ? 'Processing...' 
+              : Strings.transferNow.tr,
           onPressed: () {
-            if (formKey.currentState!.validate()) {
-              controller.navigateToConfirmTransferMoneyScreen();
+            if (!controller.isProcessingTransfer.value && formKey.currentState!.validate()) {
+              controller.processTransfer();
             }
           },
           borderColorName: Colors.transparent,
-        ),
+        )),
       ),
     );
   }
@@ -530,7 +571,7 @@ class MaxValueValidator extends TextFieldValidator {
     if (value == null || value.isEmpty) {
       return true;
     }
-    final number = int.tryParse(value);
+    final int? number = int.tryParse(value);
     if (number == null) {
       return true;
     }

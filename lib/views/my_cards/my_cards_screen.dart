@@ -112,7 +112,7 @@ class MyCardsScreen extends StatelessWidget {
         itemCount: controller.cards.length,
         separatorBuilder: (context, index) => const SizedBox(height: 15),
         itemBuilder: (context, index) {
-          final card = controller.cards[index];
+          final CardModel card = controller.cards[index];
           return _buildCardItem(context, card, controller);
         },
       ),
@@ -319,4 +319,4 @@ class MyCardsScreen extends StatelessWidget {
         return Icons.payment;
     }
   }
-} 
+}

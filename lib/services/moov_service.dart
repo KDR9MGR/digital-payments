@@ -40,7 +40,7 @@ class MoovService {
     if (MoovConfig.testMode) {
       AppLogger.log('Test mode: Creating mock Moov account for: $email');
       await Future.delayed(
-        Duration(milliseconds: 500),
+        Duration(milliseconds: 300),
       ); // Simulate network delay
       return {
         'success': true,
@@ -164,61 +164,9 @@ class MoovService {
     }
   }
 
-  // Process subscription payment
-  Future<Map<String, dynamic>?> processSubscriptionPayment({
-    required String accountId,
-    required String paymentMethodId,
-    required double amount,
-    required String currency,
-    required String subscriptionId,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/transfers'),
-        headers: _headers,
-        body: jsonEncode({
-          'source': {'paymentMethodID': paymentMethodId},
-          'destination': {
-            'account': {
-              'accountID':
-                  'your_merchant_account_id', // Your business account ID
-            },
-          },
-          'amount': {
-            'currency': currency,
-            'value': (amount * 100).toInt(), // Convert to cents
-          },
-          'description': 'Super Payments Monthly Subscription',
-          'metadata': {
-            'subscriptionId': subscriptionId,
-            'userId': accountId,
-            'planType': 'super_payments_monthly',
-          },
-        }),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        return {
-          'success': true,
-          'transferId': data['transferID'],
-          'status': data['status'],
-          'data': data,
-        };
-      } else {
-        AppLogger.log(
-          'Error processing payment: ${response.statusCode} - ${response.body}',
-        );
-        return {
-          'success': false,
-          'error': 'Payment failed: ${response.reasonPhrase}',
-        };
-      }
-    } catch (e) {
-      AppLogger.log('Error processing subscription payment: $e');
-      return {'success': false, 'error': 'Network error: $e'};
-    }
-  }
+  // NOTE: Subscription payment processing has been removed
+  // Moov is now only used for send/receive money functionality
+  // Subscriptions are handled via in-app purchases
 
   // Get account details
   Future<Map<String, dynamic>?> getAccount(String accountId) async {
@@ -245,6 +193,15 @@ class MoovService {
 
   // Get payment methods for an account
   Future<List<Map<String, dynamic>>> getPaymentMethods(String accountId) async {
+    if (MoovConfig.testMode) {
+      return [
+        {
+          'paymentMethodID': 'pm_test_wallet',
+          'type': 'moov-wallet',
+          'status': 'active'
+        }
+      ];
+    }
     try {
       final response = await http.get(
         Uri.parse('$_baseUrl/accounts/$accountId/payment-methods'),
@@ -319,6 +276,19 @@ class MoovService {
     required String currency,
     String? description,
   }) async {
+    if (MoovConfig.testMode) {
+      AppLogger.log('Test mode: Simulating P2P transfer ${amount.toStringAsFixed(2)} $currency from $senderAccountId to $recipientAccountId');
+      await Future.delayed(Duration(milliseconds: 300));
+      return {
+        'success': true,
+        'transferId': 'test_tx_${DateTime.now().millisecondsSinceEpoch}',
+        'status': 'completed',
+        'data': {
+          'transferID': 'test_tx_${DateTime.now().millisecondsSinceEpoch}',
+          'status': 'completed'
+        }
+      };
+    }
     try {
       AppLogger.log('Processing P2P transfer from $senderAccountId to $recipientAccountId');
 
@@ -377,6 +347,9 @@ class MoovService {
     String? phone,
   }) async {
     try {
+      if (MoovConfig.testMode) {
+        return 'test_account_${userId.substring(0, 8)}';
+      }
       // First, try to get existing account by foreign ID
       final existingAccount = await _getAccountByForeignId(userId);
       if (existingAccount != null) {

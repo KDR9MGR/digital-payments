@@ -1,6 +1,5 @@
-import '../config/moov_config.dart';
 import '../routes/routes.dart';
-import '../services/moov_service.dart';
+// NOTE: Moov imports removed - only used for send/receive money, not subscriptions
 import '../services/platform_payment_service.dart';
 import '../services/subscription_service.dart';
 import '../services/payment_validation_service.dart';
@@ -19,7 +18,8 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SubscriptionController extends GetxController {
-  final MoovService _moovService = MoovService();
+  // NOTE: MoovService removed from subscription controller
+  // Moov is only used for send/receive money functionality
   final SubscriptionService _subscriptionService =
       Get.find<SubscriptionService>();
   final FirebaseBatchService _batchService = FirebaseBatchService();
@@ -36,9 +36,8 @@ class SubscriptionController extends GetxController {
   final RxList<Map<String, dynamic>> _paymentMethods =
       <Map<String, dynamic>>[].obs;
   final RxString _customerId = ''.obs;
-  final RxString _moovAccountId = ''.obs;
-  final RxBool _useMoovPayments =
-      false.obs; // Platform payments are primary, Moov is optional
+  // NOTE: Moov-related subscription variables removed
+  // Subscriptions now use in-app purchases only
   final RxBool _googlePayAvailable = false.obs;
   final RxBool _applePayAvailable = false.obs;
 
@@ -62,15 +61,19 @@ class SubscriptionController extends GetxController {
   List<Map<String, dynamic>> get subscriptions => _subscriptions;
   List<Map<String, dynamic>> get paymentMethods => _paymentMethods;
   String get customerId => _customerId.value;
-  String get moovAccountId => _moovAccountId.value;
-  bool get useMoovPayments => _useMoovPayments.value;
+  // NOTE: Moov getters removed - subscriptions use in-app purchases only
   bool get googlePayAvailable => _googlePayAvailable.value;
   bool get applePayAvailable => _applePayAvailable.value;
 
-  // Get the single plan
-  String get singlePlanId => 'super_payments';
-  Map<String, dynamic>? get singlePlan =>
-      MoovConfig.subscriptionPlans['super_payments'];
+  // Get the single plan - now uses in-app purchase plan
+  String get singlePlanId => 'premium_monthly';
+  Map<String, dynamic>? get singlePlan => {
+    'id': 'premium_monthly',
+    'name': 'Premium Monthly',
+    'price': 1.99,
+    'currency': 'USD',
+    'interval': 'month'
+  };
 
   @override
   void onInit() {
@@ -90,11 +93,16 @@ class SubscriptionController extends GetxController {
     _checkForIncompleteSession();
 
     // Listen to subscription service stream for real-time updates
+    // This ensures immediate UI updates when subscription status changes
     _subscriptionStatusSubscription = _subscriptionService
         .subscriptionStatusStream
         .listen((hasSubscription) {
+          AppLogger.log('SubscriptionController: Received subscription status update: $hasSubscription');
           _hasActiveSubscription.value = hasSubscription;
           _subscriptionStatus.value = hasSubscription ? 'active' : 'inactive';
+          AppLogger.log('SubscriptionController: Updated local subscription status to: ${_hasActiveSubscription.value}');
+          // Force UI update by triggering reactive updates
+          update();
         });
   }
 
@@ -127,10 +135,7 @@ class SubscriptionController extends GetxController {
         // Always load customer ID for platform payments
         await _loadCustomerId();
 
-        // Optionally load Moov account if needed (non-blocking)
-        if (useMoovPayments) {
-          _loadMoovAccountId(); // Run asynchronously without blocking
-        }
+        // NOTE: Moov account loading removed - subscriptions use in-app purchases only
 
         // These methods should not fail the entire initialization
         try {
@@ -172,7 +177,7 @@ class SubscriptionController extends GetxController {
     _subscriptionStatus.value =
         cachedStatus['subscriptionStatus'] ?? 'inactive';
     _customerId.value = cachedStatus['customerId'] ?? '';
-    _moovAccountId.value = cachedStatus['moovAccountId'] ?? '';
+    // NOTE: Moov account ID removed - subscriptions use in-app purchases only
   }
 
   // Check platform payment availability
@@ -187,108 +192,9 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  // Load Moov account ID from Firestore or create new account
-  Future<void> _loadMoovAccountId() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        AppLogger.log('User not authenticated, skipping Moov account loading');
-        return;
-      }
+  // NOTE: _loadMoovAccountId method removed - subscriptions use in-app purchases only
 
-      // Use optimized query service to get user data
-      final userData = await _queryOptimizer.getUserData(user.uid);
-
-      if (userData != null && userData['moovAccountId'] != null) {
-        _moovAccountId.value = userData['moovAccountId'];
-        AppLogger.log(
-          'Loaded existing Moov account ID: ${_moovAccountId.value}',
-        );
-      } else {
-        AppLogger.log(
-          'No existing Moov account found - will create on demand if needed',
-        );
-        // Don't create Moov account automatically
-        // It will be created only when specifically needed for Moov payments
-      }
-    } catch (e) {
-      AppLogger.log('Error loading Moov account ID: $e');
-      // Don't throw error - allow app to continue without Moov
-    }
-  }
-
-  // Separate method to create Moov account
-  Future<void> _createMoovAccount(User user) async {
-    // Get user data for account creation
-    String email = user.email ?? 'user@example.com';
-    String firstName = 'User';
-    String lastName = '';
-
-    // Try to get existing user data from optimized query
-    final userData = await _queryOptimizer.getUserData(user.uid);
-    if (userData != null) {
-      firstName = userData['firstName'] ?? 'User';
-      lastName = userData['lastName'] ?? '';
-      email = userData['email'] ?? user.email ?? 'user@example.com';
-    } else {
-      // Parse display name if available
-      if (user.displayName != null && user.displayName!.isNotEmpty) {
-        final nameParts = user.displayName!.split(' ');
-        firstName = nameParts.first;
-        if (nameParts.length > 1) {
-          lastName = nameParts.sublist(1).join(' ');
-        }
-      }
-    }
-
-    AppLogger.log('Creating Moov account for user: $email');
-
-    // Create new Moov account
-    final accountResult = await _moovService.createAccount(
-      email: email,
-      firstName: firstName,
-      lastName: lastName,
-      phone: user.phoneNumber,
-      userId: user.uid,
-    );
-
-    if (accountResult != null && accountResult['success'] == true) {
-      _moovAccountId.value = accountResult['accountId'];
-      AppLogger.log('Created Moov account: ${_moovAccountId.value}');
-
-      // Use batch service for optimized writes
-      final userData = await _queryOptimizer.getUserData(user.uid);
-      if (userData != null) {
-        await _batchService.addUpdate(
-          collection: 'users',
-          documentId: user.uid,
-          data: {'moovAccountId': _moovAccountId.value},
-        );
-      } else {
-        // Create new user document if it doesn't exist
-        await _batchService.addWrite(
-          collection: 'users',
-          documentId: user.uid,
-          data: {
-            'userId': user.uid,
-            'email': email,
-            'firstName': firstName,
-            'lastName': lastName,
-            'moovAccountId': _moovAccountId.value,
-            'createdAt': FieldValue.serverTimestamp(),
-          },
-        );
-      }
-      await _batchService.flushBatch();
-
-      // Invalidate cache to ensure fresh data
-      await _cacheService.invalidateUserCaches(user.uid);
-    } else {
-      throw Exception(
-        'Failed to create Moov account: ${accountResult?['error'] ?? 'Unknown error'}',
-      );
-    }
-  }
+  // NOTE: _createMoovAccount method removed - subscriptions use in-app purchases only
 
   // Load customer ID from Firestore or create new customer
   Future<void> _loadCustomerId() async {
@@ -462,10 +368,7 @@ class SubscriptionController extends GetxController {
           'currentPeriodEnd': DateTime.now().add(Duration(days: 30)),
         };
 
-        // Only add moovAccountId if it exists (optional for platform payments)
-        if (_moovAccountId.value.isNotEmpty) {
-          subscriptionData['moovAccountId'] = _moovAccountId.value;
-        }
+        // NOTE: Moov account ID removed - subscriptions use in-app purchases only
 
         await _storeSubscriptionData(subscriptionData);
 
@@ -528,7 +431,7 @@ class SubscriptionController extends GetxController {
           'currentPlan': subscriptionData['planId'] ?? '',
           'subscriptionStatus': subscriptionData['status'] ?? 'inactive',
           'customerId': _customerId.value,
-          'moovAccountId': _moovAccountId.value,
+          // NOTE: moovAccountId removed - subscriptions use in-app purchases only
           'lastUpdated': DateTime.now().toIso8601String(),
         };
         await _cacheService.cacheSubscriptionStatus(userId, cacheData);
@@ -590,28 +493,7 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  // Delete payment method
-  Future<bool> deletePaymentMethod(String paymentMethodId) async {
-    _isLoading.value = true;
-    try {
-      final success = await _moovService.deletePaymentMethod(
-        _moovAccountId.value,
-        paymentMethodId,
-      );
-
-      if (success) {
-        await _loadPaymentMethods(); // Refresh payment methods
-        Get.snackbar('Success', 'Payment method removed successfully');
-      }
-
-      return success;
-    } catch (e) {
-      AppLogger.log('Error deleting payment method: $e');
-      return false;
-    } finally {
-      _isLoading.value = false;
-    }
-  }
+  // NOTE: deletePaymentMethod removed - subscriptions use in-app purchases only
 
   // Navigate to subscription screen
   void navigateToSubscriptions() {
@@ -861,7 +743,7 @@ class SubscriptionController extends GetxController {
           'currency': plan['currency'],
           'interval': plan['interval'],
           'userId': FirebaseAuth.instance.currentUser?.uid,
-          'moovAccountId': _moovAccountId.value,
+          // NOTE: moovAccountId removed - subscriptions use in-app purchases only
           'paymentMethod': 'apple_pay',
           'createdAt': FieldValue.serverTimestamp(),
           'currentPeriodStart': DateTime.now(),

@@ -14,7 +14,6 @@ class AppLifecycleDetector extends StatefulWidget {
 
 class _AppLifecycleDetectorState extends State<AppLifecycleDetector> with WidgetsBindingObserver {
   late SubscriptionController _subscriptionController;
-  AppLifecycleState? _lastLifecycleState;
   DateTime? _backgroundTime;
   
   @override
@@ -55,8 +54,6 @@ class _AppLifecycleDetectorState extends State<AppLifecycleDetector> with Widget
         // App is hidden (iOS specific)
         break;
     }
-    
-    _lastLifecycleState = state;
   }
   
   void _handleAppResume() {

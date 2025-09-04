@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
-import '../../services/qr_scanner_service.dart';
 
 import '../../utils/custom_color.dart';
 import '../../utils/custom_style.dart';
@@ -25,19 +24,11 @@ class MakePaymentScanQrCodeScreenState
     extends State<MakePaymentScanQrCodeScreen> {
   final qrKey = GlobalKey(debugLabel: 'QR');
   QRViewController? controller;
-  late QRScannerService qrScannerService;
 
   Barcode? barcode;
 
   @override
-  void initState() {
-    super.initState();
-    qrScannerService = QRScannerService.create();
-  }
-
-  @override
   void dispose() {
-    qrScannerService.dispose();
     super.dispose();
   }
 
@@ -50,15 +41,15 @@ class MakePaymentScanQrCodeScreenState
       if (Platform.isAndroid) {
         await controller?.pauseCamera();
       } else if (Platform.isIOS) {
-        controller?.resumeCamera();
+        await controller?.resumeCamera();
       }
     }
   }
 
   void readQr() async {
-    if (barcode != null) {
+    if (barcode != null && barcode!.code != null) {
       await controller?.pauseCamera();
-      // Navigate or process the QR code data
+      Get.back(result: barcode!.code);
     }
   }
 
@@ -129,8 +120,8 @@ class MakePaymentScanQrCodeScreenState
   // bottom qr code message
   InkWell _qrCodeBottomMessageWidget(BuildContext context) {
     return InkWell(
-      onTap: () {
-        controller?.resumeCamera();
+      onTap: () async {
+        await controller?.resumeCamera();
         setState(() {});
       },
       child: Container(

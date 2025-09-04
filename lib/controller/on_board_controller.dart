@@ -9,8 +9,8 @@ import '../utils/strings.dart';
 import '../widgets/buttons/primary_button.dart';
 
 class OnboardController extends GetxController {
-  var selectedPageIndex = 0.obs;
-  var pageController = PageController();
+  RxInt selectedPageIndex = 0.obs;
+PageController pageController = PageController();
 
   bool get isLastPage => selectedPageIndex.value == onBoardModePages.length;
 

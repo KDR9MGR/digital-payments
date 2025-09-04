@@ -104,7 +104,7 @@ class SubscriptionPlansScreen extends StatelessWidget {
   }
 
   Widget _premiumPlanWidget(SubscriptionController controller) {
-    final planData = controller.singlePlan;
+    final Map<String, dynamic>? planData = controller.singlePlan;
     if (planData == null) return const SizedBox();
 
     return Container(
@@ -237,8 +237,8 @@ class SubscriptionPlansScreen extends StatelessWidget {
   }
 
   Widget _featuresListWidget() {
-    final controller = Get.find<SubscriptionController>();
-    final planData = controller.singlePlan;
+    final SubscriptionController controller = Get.find<SubscriptionController>();
+    final Map<String, dynamic>? planData = controller.singlePlan;
     if (planData == null) return const SizedBox();
 
     return Container(
@@ -303,8 +303,8 @@ class SubscriptionPlansScreen extends StatelessWidget {
   Column _subscribeButtonWidget(SubscriptionController controller) {
     return Column(
       children: [
-        // Google Pay button (Android)
-        if (controller.googlePayAvailable) ...[
+        // In-app purchase button
+        if (true) ...[
           SizedBox(
             width: double.infinity,
             height: 50.h,
@@ -333,7 +333,7 @@ class SubscriptionPlansScreen extends StatelessWidget {
                   ),
                   SizedBox(width: Dimensions.widthSize),
                   Text(
-                    'Pay with Google Pay',
+                    'Subscribe Now',
                     style: CustomStyle.commonTextTitle.copyWith(
                       color: Colors.white,
                       fontSize: Dimensions.mediumTextSize,
@@ -344,76 +344,11 @@ class SubscriptionPlansScreen extends StatelessWidget {
             ),
           ),
           SizedBox(height: Dimensions.heightSize),
-        ],
-
-        // Apple Pay button (iOS)
-        if (controller.applePayAvailable) ...[
-          SizedBox(
-            width: double.infinity,
-            height: 50.h,
-            child: ElevatedButton(
-              onPressed: () => controller.processApplePaySubscription(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(Dimensions.radius),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.apple, color: Colors.white, size: 24.r),
-                  SizedBox(width: Dimensions.widthSize),
-                  Text(
-                    'Pay with Apple Pay',
-                    style: CustomStyle.commonTextTitle.copyWith(
-                      color: Colors.white,
-                      fontSize: Dimensions.mediumTextSize,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: Dimensions.heightSize),
-        ],
-
-        // No payment method available message
-        if (!controller.googlePayAvailable &&
-            !controller.applePayAvailable) ...[
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(Dimensions.radius),
-              border: Border.all(color: Colors.orange),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.payment_outlined, color: Colors.orange, size: 32.r),
-                SizedBox(height: Dimensions.heightSize),
-                Text(
-                  'Payment Not Available',
-                  style: CustomStyle.commonTextTitle.copyWith(
-                    color: Colors.orange,
-                  ),
-                ),
-                SizedBox(height: Dimensions.heightSize * 0.5),
-                Text(
-                  'Google Pay or Apple Pay is required for subscriptions. Please ensure you have a payment method set up in your device settings.',
-                  style: CustomStyle.commonSubTextTitle,
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
         ],
 
         SizedBox(height: Dimensions.heightSize),
         Text(
-          'Secure payments powered by Moov.io',
+          'Secure payments via App Store/Google Play',
           style: CustomStyle.commonSubTextTitle.copyWith(
             fontSize: Dimensions.smallTextSize - 2,
             color: Colors.grey,

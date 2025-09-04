@@ -8,8 +8,8 @@ class SplashController extends GetxController {
   @override
   void onReady() {
     super.onReady();
-    var languageList = LocalStorage.getLanguage();
-    var locale = Locale(languageList[0], languageList[1]);
+    List<String> languageList = LocalStorage.getLanguage().cast<String>();
+Locale locale = Locale(languageList[0], languageList[1]);
     Get.updateLocale(locale);
   }
 }

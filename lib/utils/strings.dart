@@ -444,9 +444,9 @@ class Strings {
   static const company = 'COMPANY';
   static const isLoggedIn = 'IS_LOGGED_IN';
 
-  static var myWallet = 'My Wallet';
-  static var myCoupons = 'My Coupons';
+  static String myWallet = 'My Wallet';
+static String myCoupons = 'My Coupons';
 
   // home screen
-  static var goodMorning = 'Good Morning';
+  static String goodMorning = 'Good Morning';
 }

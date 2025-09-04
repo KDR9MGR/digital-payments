@@ -679,99 +679,9 @@ exports.validatePlatformPayment = functions
 });
 
 // Create Moov account
-exports.createMoovAccount = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
-  }
+// NOTE: createMoovAccount removed - Moov is now only for send/receive money, not subscriptions
 
-  const { email, firstName, lastName, phone, userId } = data;
-
-  try {
-    // Check if account already exists
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (userDoc.exists && userDoc.data().moovAccountId) {
-      return { accountId: userDoc.data().moovAccountId };
-    }
-
-    // Create account in Moov
-    const response = await axios.post(`${MOOV_BASE_URL}/accounts`, {
-      accountType: 'individual',
-      profile: {
-        individual: {
-          name: {
-            firstName: firstName,
-            lastName: lastName,
-          },
-          email: email,
-          phone: {
-            number: phone || '',
-            countryCode: '1',
-          },
-        },
-      },
-      termsOfService: {
-        token: 'kgT1uxoMAk7QKuyJcmQE8nqW_HjpyuXBabiXPi6T83fUQoxGpWKvqPNDfhruYEp6_JW7HjooGhBs5mAvXNPMoA',
-      },
-      capabilities: ['transfers', 'send-funds', 'collect-funds'],
-      foreignId: userId,
-    }, { headers: moovHeaders });
-
-    const accountId = response.data.accountID;
-
-    // Save account ID to Firestore
-    await db.collection('users').doc(userId).set({
-      moovAccountId: accountId,
-      moovAccountStatus: response.data.status,
-    }, { merge: true });
-
-    return { accountId: accountId };
-  } catch (error) {
-    console.error('Error creating Moov account:', error);
-    throw new functions.https.HttpsError('internal', 'Failed to create Moov account');
-  }
-});
-
-// Process subscription payment
-exports.processMoovSubscription = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
-  }
-
-  const { accountId, paymentMethodId, amount, currency, subscriptionId } = data;
-
-  try {
-    // Process payment via Moov
-    const response = await axios.post(`${MOOV_BASE_URL}/transfers`, {
-      source: {
-        paymentMethodID: paymentMethodId,
-      },
-      destination: {
-        account: {
-          accountID: 'your_merchant_account_id', // Your business account ID
-        },
-      },
-      amount: {
-        currency: currency,
-        value: Math.round(amount * 100), // Convert to cents
-      },
-      description: 'Super Payments Monthly Subscription',
-      metadata: {
-        subscriptionId: subscriptionId,
-        userId: context.auth.uid,
-        planType: 'super_payments_monthly',
-      },
-    }, { headers: moovHeaders });
-
-    return {
-      success: true,
-      transferId: response.data.transferID,
-      status: response.data.status,
-    };
-  } catch (error) {
-    console.error('Error processing Moov subscription:', error);
-    throw new functions.https.HttpsError('internal', 'Failed to process subscription payment');
-  }
-});
+// NOTE: processMoovSubscription removed - subscriptions now use in-app purchases only
 
 // ============================================================================
 // COMPREHENSIVE SUBSCRIPTION BACKEND SYSTEM
@@ -1001,9 +911,7 @@ exports.processSubscriptionRenewals = functions.pubsub.schedule('0 2 * * *')
             case 'apple_pay':
               renewalResult = await processApplePayRenewal(subscription, doc.id);
               break;
-            case 'moov':
-              renewalResult = await processMoovRenewal(subscription, doc.id);
-              break;
+            // NOTE: Moov subscriptions removed - only in-app purchases supported
             default:
               console.log(`Unknown payment method: ${subscription.paymentMethod}`);
           }
@@ -1649,53 +1557,7 @@ async function processApplePayRenewal(subscription, subscriptionId) {
 }
 
 // Process Moov renewal
-async function processMoovRenewal(subscription, subscriptionId) {
-  try {
-    // For Moov subscriptions, we need to initiate a new payment
-    // This would typically involve calling the Moov API to process a recurring payment
-    
-    const response = await axios.post(`${MOOV_BASE_URL}/transfers`, {
-      source: {
-        paymentMethodID: subscription.moovPaymentMethodId,
-      },
-      destination: {
-        account: {
-          accountID: 'your_merchant_account_id',
-        },
-      },
-      amount: {
-        currency: subscription.currency,
-        value: Math.round(subscription.amount * 100),
-      },
-      description: 'Subscription Renewal',
-      metadata: {
-        subscriptionId: subscriptionId,
-        userId: subscription.userId,
-        planType: subscription.planType,
-        renewalAttempt: true
-      },
-    }, { headers: moovHeaders });
-    
-    if (response.data.status === 'completed') {
-      const newExpiryDate = new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)); // 30 days from now
-      
-      await db.collection('subscriptions').doc(subscriptionId).update({
-        expiryDate: newExpiryDate,
-        lastPaymentDate: FieldValue.serverTimestamp(),
-        moovTransferId: response.data.transferID,
-        updatedAt: FieldValue.serverTimestamp()
-      });
-      
-      return true;
-    }
-    
-    return false;
-    
-  } catch (error) {
-    console.error('Error processing Moov renewal:', error);
-    return false;
-  }
-}
+// NOTE: processMoovRenewal removed - subscriptions now use in-app purchases only
 
 // ============================================================================
 // WEBHOOK NOTIFICATION HANDLERS

@@ -38,14 +38,14 @@ class MoneyOutScanQrCodeScreenState extends State<MoneyOutScanQrCodeScreen> {
     if (Platform.isAndroid) {
       await controller?.pauseCamera();
     } else if (Platform.isIOS) {
-      controller?.resumeCamera();
+      await controller?.resumeCamera();
     }
   }
 
   void readQr() async {
-    if (barcode != null) {
+    if (barcode != null && barcode!.code != null) {
       await controller?.pauseCamera();
-      // Navigate or process the QR code data
+      Get.back(result: barcode!.code);
     }
   }
 
@@ -113,8 +113,8 @@ class MoneyOutScanQrCodeScreenState extends State<MoneyOutScanQrCodeScreen> {
   // bottom qr code message
   InkWell _qrCodeBottomMessageWidget(BuildContext context) {
     return InkWell(
-      onTap: () {
-        controller?.resumeCamera();
+      onTap: () async {
+        await controller?.resumeCamera();
         setState(() {});
       },
       child: Container(

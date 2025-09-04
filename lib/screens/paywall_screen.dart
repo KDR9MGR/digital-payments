@@ -365,7 +365,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
             child: Text(
               'Skip',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -421,7 +421,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.7),
+                          ).colorScheme.onSurface.withValues(alpha: 0.7),
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -468,7 +468,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                 ).textTheme.bodyMedium?.copyWith(
                                   color: Theme.of(
                                     context,
-                                  ).colorScheme.onSurface.withOpacity(0.7),
+                                  ).colorScheme.onSurface.withValues(alpha: 0.7),
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -525,7 +525,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                         ? Theme.of(context).colorScheme.primary
                                         : Theme.of(
                                           context,
-                                        ).colorScheme.primary.withOpacity(0.6),
+                                        ).colorScheme.primary.withValues(alpha: 0.6),
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16.r),
@@ -578,7 +578,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -761,7 +761,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
           child: Text(
             'No subscription plans available. Please check your connection and try again.',
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
             ),
             textAlign: TextAlign.center,
           ),
@@ -784,13 +784,13 @@ class _PaywallScreenState extends State<PaywallScreen> {
           decoration: BoxDecoration(
             color:
                 isSelected
-                    ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
                     : Theme.of(context).colorScheme.surface,
             border: Border.all(
               color:
                   isSelected
                       ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                      : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
               width: 2,
             ),
             borderRadius: BorderRadius.circular(16.r),
@@ -825,7 +825,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.7),
+                        ).colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
                     ),
                   ],

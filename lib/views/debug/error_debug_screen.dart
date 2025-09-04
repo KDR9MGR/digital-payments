@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../utils/error_debug_helper.dart';
-import '../../services/subscription_error_handler.dart';
 
 class ErrorDebugScreen extends StatefulWidget {
   const ErrorDebugScreen({super.key});
@@ -214,7 +213,7 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
   }
 
   Widget _buildRecentErrorsList() {
-    final recentErrors = (errorStats['recentErrors'] as List?) ?? [];
+    final List<dynamic> recentErrors = (errorStats['recentErrors'] as List?) ?? [];
 
     if (recentErrors.isEmpty) {
       return Center(
@@ -228,7 +227,7 @@ class _ErrorDebugScreenState extends State<ErrorDebugScreen> {
     return ListView.builder(
       itemCount: recentErrors.length,
       itemBuilder: (context, index) {
-        final error = recentErrors[index];
+        final Map<String, dynamic> error = recentErrors[index];
         return Card(
           margin: EdgeInsets.symmetric(vertical: 2),
           child: ListTile(

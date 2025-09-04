@@ -15,7 +15,7 @@ class LocalStorage {
     final box1 = GetStorage();
     final box2 = GetStorage();
 
-    var locale = Locale(langSmall, langCap);
+    Locale locale = Locale(langSmall, langCap);
     Get.updateLocale(locale);
     await box1.write(smallLanguage, langSmall);
     await box2.write(capitalLanguage, langCap);

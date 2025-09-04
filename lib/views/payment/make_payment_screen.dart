@@ -11,7 +11,9 @@ import '../../utils/strings.dart';
 import '../../widgets/buttons/primary_button.dart';
 import '../../widgets/inputs/amount_input_widget.dart';
 import '../../widgets/inputs/dropdown_widget.dart';
+import '../../widgets/inputs/validated_dropdown_widget.dart';
 import '../../widgets/inputs/secondary_text_input_widget.dart';
+import 'package:form_field_validator/form_field_validator.dart';
 import '../../widgets/make_payment_wallet_info_widget.dart';
 import '../../widgets/primary_appbar.dart';
 import '../../widgets/go_premium_widget.dart';
@@ -69,14 +71,12 @@ class MakePaymentScreen extends StatelessWidget {
       children: [
         _infoInputWidget(context, controller),
         _walletInfoWidget(context, controller),
-        // Show Go Premium widget if user doesn't have active subscription
+        // Show Go Premium widget only if user doesn't have active subscription
         Obx(() {
           if (!subscriptionController.hasActiveSubscription) {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: GoPremiumBanner(
-                showCloseButton: false,
-              ),
+              child: GoPremiumBanner(showCloseButton: false),
             );
           }
           return SizedBox.shrink();
@@ -147,10 +147,42 @@ class MakePaymentScreen extends StatelessWidget {
               SizedBox(height: Dimensions.heightSize),
               AmountInputWidget(
                 hintText: '0.00',
+                validator: MultiValidator([
+                  RequiredValidator(errorText: 'Please enter an amount'),
+                  MinLengthValidator(1, errorText: 'Minimum amount is 1.00')
+                ]).call,
                 controller: controller.amountController,
                 color: CustomColor.secondaryColor,
                 suffixIcon: _amountButton(context, controller),
               ),
+              SizedBox(height: Dimensions.heightSize),
+              
+              // Payment Method Selection
+              TextLabelWidget(text: 'Payment Method'),
+              SizedBox(height: Dimensions.heightSize),
+              Obx(() {
+                controller.refreshPaymentMethods();
+                return ValidatedDropDownInputWidget(
+                  items: controller.paymentMethods,
+                  color: CustomColor.primaryColor.withValues(alpha: 0.1),
+                  hintText: 'Select Payment Method',
+                  value: controller.getCurrentPaymentMethod().isEmpty 
+                      ? null 
+                      : controller.getCurrentPaymentMethod(),
+                  onChanged: (value) {
+                    controller.selectedPaymentMethod.value = value ?? '';
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please select a payment method';
+                    }
+                    if (!controller.paymentMethods.contains(value)) {
+                      return 'Invalid payment method selected';
+                    }
+                    return null;
+                  },
+                );
+              }),
               SizedBox(height: Dimensions.heightSize),
               Text(
                 '${Strings.limit.tr}: 1.00 -  100,000.00 USD',

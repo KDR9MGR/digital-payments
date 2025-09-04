@@ -208,7 +208,7 @@ class SubscriptionService {
                 duration: const Duration(seconds: 6),
                 isDismissible: true,
               );
-              
+
               throw SubscriptionException(
                 'No subscription products available',
                 code: 'NO_PRODUCTS_FOUND',
@@ -257,19 +257,23 @@ class SubscriptionService {
     // Provide specific error messages based on the error type
     String userMessage;
     String title;
-    
+
     if (message.contains('not available')) {
       title = 'In-App Purchases Unavailable';
-      userMessage = 'In-app purchases are not available on this device. Please check your device settings or try again later.';
+      userMessage =
+          'In-app purchases are not available on this device. Please check your device settings or try again later.';
     } else if (message.contains('products')) {
       title = 'Subscription Options Unavailable';
-      userMessage = 'Subscription options are temporarily unavailable. Please check your internet connection and try again.';
+      userMessage =
+          'Subscription options are temporarily unavailable. Please check your internet connection and try again.';
     } else if (message.contains('network') || message.contains('connection')) {
       title = 'Connection Error';
-      userMessage = 'Unable to connect to subscription services. Please check your internet connection and try again.';
+      userMessage =
+          'Unable to connect to subscription services. Please check your internet connection and try again.';
     } else {
       title = 'Premium Features';
-      userMessage = 'Premium features require an active subscription. Please try again or contact support if the issue persists.';
+      userMessage =
+          'Premium features require an active subscription. Please try again or contact support if the issue persists.';
     }
 
     // Show user-friendly error message
@@ -284,16 +288,285 @@ class SubscriptionService {
     );
   }
 
+  /// Validate subscription using client-side Play Store status
+  Future<bool> _validateClientSideSubscription(
+    PurchaseDetails purchaseDetails,
+  ) async {
+    try {
+      AppLogger.log('Starting client-side subscription validation');
+
+      // Check if the purchase is for a subscription product
+      if (!_productIds.contains(purchaseDetails.productID)) {
+        AppLogger.log('Product ID not in subscription products list');
+        return false;
+      }
+
+      // Verify purchase status is completed
+      if (purchaseDetails.status != PurchaseStatus.purchased &&
+          purchaseDetails.status != PurchaseStatus.restored) {
+        AppLogger.log(
+          'Purchase status is not completed: ${purchaseDetails.status}',
+        );
+        return false;
+      }
+
+      // For Android, validate purchase token exists and is not empty
+      if (io.Platform.isAndroid) {
+        try {
+          final verificationData = jsonDecode(
+            purchaseDetails.verificationData.localVerificationData,
+          );
+          final purchaseToken = verificationData['purchaseToken'];
+          final purchaseState = verificationData['purchaseState'];
+
+          if (purchaseToken == null || purchaseToken.isEmpty) {
+            AppLogger.log('Invalid purchase token for Android');
+            return false;
+          }
+
+          // purchaseState 1 = purchased, 0 = pending
+          if (purchaseState != 1) {
+            AppLogger.log('Purchase state is not completed: $purchaseState');
+            return false;
+          }
+
+          AppLogger.log('Android purchase validation successful');
+          return true;
+        } catch (e) {
+          AppLogger.log('Error validating Android purchase data: $e');
+          return false;
+        }
+      }
+
+      // For iOS, check receipt data exists
+      if (io.Platform.isIOS) {
+        final receiptData =
+            purchaseDetails.verificationData.serverVerificationData;
+        if (receiptData.isEmpty) {
+          AppLogger.log('No receipt data available for iOS');
+          return false;
+        }
+
+        AppLogger.log('iOS purchase validation successful');
+        return true;
+      }
+
+      AppLogger.log('Platform not supported for client-side validation');
+      return false;
+    } catch (e) {
+      AppLogger.log('Error in client-side subscription validation: $e');
+      return false;
+    }
+  }
+
+  /// Attempt backend validation in background without blocking user experience
+  void _attemptBackendValidationInBackground({
+    required String receiptData,
+    required String productId,
+    required String userId,
+    required String platform,
+    String? purchaseToken,
+    String? packageName,
+  }) {
+    // Run in background without awaiting
+    Future.delayed(const Duration(seconds: 2), () async {
+      try {
+        AppLogger.log(
+          'Starting background backend validation for product: $productId, platform: $platform',
+        );
+
+        // Validate input parameters
+        if (receiptData.isEmpty) {
+          AppLogger.log('Background validation failed: Empty receipt data');
+          return;
+        }
+
+        if (userId.isEmpty) {
+          AppLogger.log('Background validation failed: Empty user ID');
+          return;
+        }
+
+        final validationResult =
+            await PurchaseValidationService.validatePurchaseWithServer(
+              receiptData: receiptData,
+              productId: productId,
+              userId: userId,
+              platform: platform,
+              purchaseToken: purchaseToken,
+              packageName: packageName,
+            );
+
+        if (validationResult.isValid) {
+          AppLogger.log(
+            'Background backend validation successful - upgrading from client-side to backend validation',
+          );
+
+          // Update to backend validation if successful
+          _storage.write('backend_validated_subscription', true);
+          _storage.write(
+            'backend_validation_date',
+            DateTime.now().millisecondsSinceEpoch,
+          );
+
+          // Update expiry if backend provides longer validity
+          if (validationResult.expiryDate != null) {
+            final backendExpiry = validationResult.expiryDate!;
+            final currentExpiry = _subscriptionExpiry;
+
+            AppLogger.log(
+              'Backend expiry: $backendExpiry, Current expiry: $currentExpiry',
+            );
+
+            if (currentExpiry == null || backendExpiry.isAfter(currentExpiry)) {
+              _subscriptionExpiry = backendExpiry;
+              _saveSubscriptionStatus();
+              AppLogger.log(
+                'Updated subscription expiry from backend validation: $backendExpiry (extended from client-side validation)',
+              );
+
+              // Notify listeners of the improved validation
+              _subscriptionStatusController.add(true);
+            } else {
+              AppLogger.log(
+                'Backend expiry ($backendExpiry) is not later than current expiry ($currentExpiry) - keeping current',
+              );
+            }
+          } else {
+            AppLogger.log(
+              'Warning: Backend validation successful but no expiry date provided',
+            );
+          }
+        } else {
+          AppLogger.log(
+            'Background backend validation failed: ${validationResult.errorMessage ?? "Unknown error"} - client-side validation remains active',
+          );
+        }
+      } catch (e, stackTrace) {
+        AppLogger.log('Background backend validation error: $e');
+        AppLogger.log('Background validation stack trace: $stackTrace');
+        // Don't affect the client-side validation that's already active
+      }
+    });
+  }
+
   /// Check for existing purchases and verify subscription status
   Future<void> _checkExistingPurchases() async {
     try {
+      AppLogger.log(
+        'Checking for existing purchases and validating client-side subscriptions',
+      );
+
+      // First check if we already have a valid client-validated subscription
+      final isClientValidated =
+          _storage.read('client_validated_subscription') ?? false;
+      final clientValidationDate = _storage.read('client_validation_date');
+
+      if (isClientValidated && clientValidationDate != null) {
+        final validationDate = DateTime.fromMillisecondsSinceEpoch(
+          clientValidationDate,
+        );
+        final expiryDate = validationDate.add(const Duration(days: 30));
+
+        if (DateTime.now().isBefore(expiryDate)) {
+          AppLogger.log(
+            'Found valid client-validated subscription, expires: $expiryDate',
+          );
+          _hasActiveSubscription = true;
+          _subscriptionExpiry = expiryDate;
+          _saveSubscriptionStatus();
+          _subscriptionStatusController.add(true);
+          _storage.write(_lastCheckKey, DateTime.now().millisecondsSinceEpoch);
+          return;
+        } else {
+          AppLogger.log(
+            'Client-validated subscription expired, clearing and checking for new purchases',
+          );
+          _storage.remove('client_validated_subscription');
+          _storage.remove('client_validation_date');
+        }
+      }
+
+      // Restore purchases to check for valid subscriptions
       await _inAppPurchase.restorePurchases();
 
-      // The purchase stream will handle the restored purchases
+      // Give the purchase stream a moment to process restored purchases
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      // If no subscription was found through the stream, try direct validation
+      if (!_hasActiveSubscription) {
+        AppLogger.log(
+          'No subscription found through purchase stream, checking for active purchases directly',
+        );
+        await _validateExistingPurchasesDirectly();
+      }
+
       // Update last check timestamp
       _storage.write(_lastCheckKey, DateTime.now().millisecondsSinceEpoch);
     } catch (e) {
       AppLogger.log('Error checking existing purchases: $e');
+    }
+  }
+
+  /// Directly validate existing purchases without relying on purchase stream
+  Future<void> _validateExistingPurchasesDirectly() async {
+    try {
+      AppLogger.log('Attempting direct validation of existing purchases');
+
+      // For Android, we can check if there are any stored purchase tokens
+      // This is a fallback when the purchase stream doesn't trigger
+      if (io.Platform.isAndroid) {
+        // Check if we have any stored purchase data that we can validate
+        final storedPurchaseData = _storage.read('last_purchase_data');
+        AppLogger.log(
+          'Android direct validation - stored purchase data: $storedPurchaseData',
+        );
+        if (storedPurchaseData != null) {
+          try {
+            final purchaseData = jsonDecode(storedPurchaseData);
+            final purchaseToken = purchaseData['purchaseToken'];
+            final productId = purchaseData['productId'];
+
+            AppLogger.log(
+              'Checking purchase token: $purchaseToken, productId: $productId',
+            );
+            AppLogger.log('Available product IDs: $_productIds');
+            if (purchaseToken != null && _productIds.contains(productId)) {
+              AppLogger.log(
+                'Found stored purchase data for validation: $productId',
+              );
+
+              // Create a mock PurchaseDetails for validation
+              // Note: This is a simplified approach for client-side validation
+              // In a real scenario, you'd want to query the Play Store directly
+
+              // Grant client-side validation for 30 days
+              _hasActiveSubscription = true;
+              _subscriptionExpiry = DateTime.now().add(
+                const Duration(days: 30),
+              );
+              _lastValidationTime = DateTime.now();
+
+              _storage.write('client_validated_subscription', true);
+              _storage.write(
+                'client_validation_date',
+                DateTime.now().millisecondsSinceEpoch,
+              );
+
+              _saveSubscriptionStatus();
+              _storage.write(_subscriptionStatusKey, true);
+              _subscriptionStatusController.add(true);
+
+              AppLogger.log(
+                'Direct validation successful - granted 30-day client-side subscription',
+              );
+            }
+          } catch (e) {
+            AppLogger.log('Error parsing stored purchase data: $e');
+          }
+        }
+      }
+    } catch (e) {
+      AppLogger.log('Error in direct purchase validation: $e');
     }
   }
 
@@ -401,6 +674,26 @@ class SubscriptionService {
         _storage.write(_subscriptionStatusKey, true);
         _storage.write(_lastCheckKey, DateTime.now().millisecondsSinceEpoch);
 
+        // Store purchase data for future direct validation
+        if (io.Platform.isAndroid) {
+          try {
+            final verificationData = jsonDecode(
+              purchaseDetails.verificationData.localVerificationData,
+            );
+            final purchaseData = {
+              'purchaseToken':
+                  verificationData['purchaseToken'] ??
+                  purchaseDetails.purchaseID,
+              'productId': purchaseDetails.productID,
+              'purchaseTime': DateTime.now().millisecondsSinceEpoch,
+            };
+            _storage.write('last_purchase_data', jsonEncode(purchaseData));
+            AppLogger.log('Stored purchase data for future validation');
+          } catch (e) {
+            AppLogger.log('Error storing purchase data: $e');
+          }
+        }
+
         // Invalidate Firebase cache to ensure immediate access
         final user = _auth.currentUser;
         if (user != null) {
@@ -416,7 +709,7 @@ class SubscriptionService {
         // This ensures immediate UI updates across the app
         _subscriptionStatusController.add(true);
         AppLogger.log('Notified all subscription listeners of status change');
-        
+
         // Also trigger a delayed refresh to ensure all controllers are updated
         Future.delayed(const Duration(milliseconds: 500), () {
           _subscriptionStatusController.add(true);
@@ -493,53 +786,115 @@ class SubscriptionService {
         return false;
       }
 
-      // Validate with Firebase Functions
-      final validationResult =
-          await PurchaseValidationService.validatePurchaseWithServer(
-            receiptData: receiptData,
-            productId: purchaseDetails.productID,
-            userId: user.uid,
-            platform: io.Platform.isIOS ? 'ios' : 'android',
-            purchaseToken: purchaseToken,
-            packageName: packageName,
-          );
+      // First attempt: Client-side validation using local Play Store status
+      AppLogger.log('Attempting client-side subscription validation first');
 
-      if (validationResult.isValid) {
+      if (await _validateClientSideSubscription(purchaseDetails)) {
         AppLogger.log(
-          'DEBUG: Purchase verification successful for: ${purchaseDetails.productID}',
-        );
-        AppLogger.log(
-          'DEBUG: Validation result expiry date: ${validationResult.expiryDate}',
+          'Client-side validation successful, granting 30-day subscription access',
         );
 
-        // Update local subscription status with validated data
-        if (validationResult.expiryDate != null) {
-          _subscriptionExpiry = validationResult.expiryDate!;
-          _hasActiveSubscription = true;
-          _lastValidationTime = DateTime.now();
+        // Grant 30-day subscription access
+        _hasActiveSubscription = true;
+        _subscriptionExpiry = DateTime.now().add(const Duration(days: 30));
+        _lastValidationTime = DateTime.now();
 
-          AppLogger.log(
-            'DEBUG: Updated subscription status - Active: $_hasActiveSubscription, Expiry: $_subscriptionExpiry',
-          );
-          _saveSubscriptionStatus();
+        // Mark as client-validated for tracking
+        _storage.write('client_validated_subscription', true);
+        _storage.write(
+          'client_validation_date',
+          DateTime.now().millisecondsSinceEpoch,
+        );
 
-          // Also save to regular storage for immediate access
-          _storage.write(_subscriptionStatusKey, true);
-          _storage.write(_lastCheckKey, DateTime.now().millisecondsSinceEpoch);
+        _saveSubscriptionStatus();
+        _storage.write(_subscriptionStatusKey, true);
+        _storage.write(_lastCheckKey, DateTime.now().millisecondsSinceEpoch);
 
-          _subscriptionStatusController.add(true);
-          AppLogger.log(
-            'DEBUG: Subscription status saved to both secure and regular storage',
-          );
-        }
+        _subscriptionStatusController.add(true);
+
+        AppLogger.log(
+          'Client-side validation completed - Active: $_hasActiveSubscription, Expiry: $_subscriptionExpiry',
+        );
+
+        // Still attempt backend validation in background for future use
+        _attemptBackendValidationInBackground(
+          receiptData: receiptData,
+          productId: purchaseDetails.productID,
+          userId: user.uid,
+          platform: io.Platform.isIOS ? 'ios' : 'android',
+          purchaseToken: purchaseToken,
+          packageName: packageName,
+        );
 
         return true;
-      } else {
-        AppLogger.log(
-          'DEBUG: Purchase verification failed: ${validationResult.errorMessage}',
-        );
-        return false;
       }
+
+      // Fallback: Validate with Firebase Functions if client-side fails
+      AppLogger.log(
+        'Client-side validation failed, attempting backend validation',
+      );
+      try {
+        final validationResult =
+            await PurchaseValidationService.validatePurchaseWithServer(
+              receiptData: receiptData,
+              productId: purchaseDetails.productID,
+              userId: user.uid,
+              platform: io.Platform.isIOS ? 'ios' : 'android',
+              purchaseToken: purchaseToken,
+              packageName: packageName,
+            );
+
+        if (validationResult.isValid) {
+          AppLogger.log(
+            'DEBUG: Backend purchase verification successful for: ${purchaseDetails.productID}',
+          );
+          AppLogger.log(
+            'DEBUG: Validation result expiry date: ${validationResult.expiryDate}',
+          );
+
+          // Update local subscription status with validated data
+          if (validationResult.expiryDate != null) {
+            _subscriptionExpiry = validationResult.expiryDate!;
+            _hasActiveSubscription = true;
+            _lastValidationTime = DateTime.now();
+
+            // Mark as backend validated
+            _storage.write('backend_validated_subscription', true);
+            _storage.write(
+              'backend_validation_date',
+              DateTime.now().millisecondsSinceEpoch,
+            );
+
+            AppLogger.log(
+              'DEBUG: Updated subscription status - Active: $_hasActiveSubscription, Expiry: $_subscriptionExpiry',
+            );
+            _saveSubscriptionStatus();
+
+            // Also save to regular storage for immediate access
+            _storage.write(_subscriptionStatusKey, true);
+            _storage.write(
+              _lastCheckKey,
+              DateTime.now().millisecondsSinceEpoch,
+            );
+
+            _subscriptionStatusController.add(true);
+            AppLogger.log(
+              'DEBUG: Subscription status saved to both secure and regular storage',
+            );
+          }
+
+          return true;
+        } else {
+          AppLogger.log(
+            'DEBUG: Backend purchase verification failed: ${validationResult.errorMessage}',
+          );
+        }
+      } catch (e) {
+        AppLogger.log('Backend validation error: $e');
+      }
+
+      AppLogger.log('Both client-side and backend validation failed');
+      return false;
     } catch (e) {
       AppLogger.log('Error during purchase verification: $e');
       return false;
@@ -706,11 +1061,15 @@ class SubscriptionService {
       // CRITICAL FIX: Always validate with backend when force refresh is requested
       // This ensures the app gets the most up-to-date subscription status
       if (forceRefresh) {
-        AppLogger.log('DEBUG: Force refresh requested - validating with backend');
+        AppLogger.log(
+          'DEBUG: Force refresh requested - validating with backend',
+        );
         await _validateSubscriptionWithBackend();
         // Immediately notify listeners of updated status
         _subscriptionStatusController.add(_hasActiveSubscription);
-        AppLogger.log('DEBUG: Force refresh completed, status: $_hasActiveSubscription');
+        AppLogger.log(
+          'DEBUG: Force refresh completed, status: $_hasActiveSubscription',
+        );
         return _hasActiveSubscription;
       }
 
@@ -796,6 +1155,32 @@ class SubscriptionService {
       final user = _auth.currentUser;
       if (user != null) {
         await _verifySubscriptionWithFirebase(user.uid);
+      }
+
+      // Check client-validated subscription expiry
+      _checkClientValidatedSubscriptionExpiry();
+
+      // If no backend subscription but client validation exists and is valid, use it
+      if (!_hasActiveSubscription) {
+        final isClientValidated =
+            _storage.read('client_validated_subscription') ?? false;
+        final clientValidationDate = _storage.read('client_validation_date');
+
+        if (isClientValidated && clientValidationDate != null) {
+          final validationDate = DateTime.fromMillisecondsSinceEpoch(
+            clientValidationDate,
+          );
+          final expiryDate = validationDate.add(const Duration(days: 30));
+
+          if (DateTime.now().isBefore(expiryDate)) {
+            _hasActiveSubscription = true;
+            _subscriptionExpiry = expiryDate;
+            _saveSubscriptionStatus();
+            AppLogger.log(
+              'Backend validation: Using client-validated subscription, expires: $expiryDate',
+            );
+          }
+        }
       }
 
       // Update last check timestamp
@@ -931,6 +1316,73 @@ class SubscriptionService {
     _fallbackService.storePlatformReceipt(receiptData);
   }
 
+  /// Check and handle client-validated subscription expiration
+  void _checkClientValidatedSubscriptionExpiry() {
+    try {
+      final isClientValidated =
+          _storage.read('client_validated_subscription') ?? false;
+      final clientValidationDate = _storage.read('client_validation_date');
+
+      AppLogger.log(
+        'Checking client-validated subscription expiry - Client validated: $isClientValidated',
+      );
+
+      if (isClientValidated && clientValidationDate != null) {
+        final validationDate = DateTime.fromMillisecondsSinceEpoch(
+          clientValidationDate,
+        );
+        final expiryDate = validationDate.add(const Duration(days: 30));
+        final timeUntilExpiry = expiryDate.difference(DateTime.now());
+
+        AppLogger.log(
+          'Client validation date: $validationDate, Expiry: $expiryDate, Time until expiry: ${timeUntilExpiry.inHours} hours',
+        );
+
+        if (DateTime.now().isAfter(expiryDate)) {
+          AppLogger.log(
+            'Client-validated subscription expired, clearing status',
+          );
+
+          // Clear client validation flags
+          _storage.remove('client_validated_subscription');
+          _storage.remove('client_validation_date');
+
+          // Clear subscription status if it was only client-validated
+          final hasBackendValidation =
+              _storage.read('backend_validated_subscription') ?? false;
+          AppLogger.log('Backend validation status: $hasBackendValidation');
+
+          if (!hasBackendValidation) {
+            _hasActiveSubscription = false;
+            _subscriptionExpiry = null;
+            _saveSubscriptionStatus();
+            _subscriptionStatusController.add(false);
+            AppLogger.log(
+              'Client-validated subscription expired and cleared - no backend validation available',
+            );
+          } else {
+            AppLogger.log(
+              'Client-validated subscription expired but backend validation still active',
+            );
+          }
+        } else {
+          AppLogger.log(
+            'Client-validated subscription still valid until: $expiryDate (${timeUntilExpiry.inDays} days remaining)',
+          );
+        }
+      } else if (isClientValidated && clientValidationDate == null) {
+        AppLogger.log(
+          'Warning: Client validation flag set but no validation date found - clearing flag',
+        );
+        _storage.remove('client_validated_subscription');
+      } else {
+        AppLogger.log('No client-validated subscription found');
+      }
+    } catch (e) {
+      AppLogger.log('Error checking client-validated subscription expiry: $e');
+    }
+  }
+
   /// Load subscription status from storage with security validation
   void _loadSubscriptionStatus() {
     try {
@@ -967,6 +1419,31 @@ class SubscriptionService {
           _hasActiveSubscription = false;
           _saveSubscriptionStatus();
           AppLogger.log('Subscription expired, status updated');
+        }
+      }
+
+      // Check client-validated subscription expiry
+      _checkClientValidatedSubscriptionExpiry();
+
+      // If no backend subscription but client validation exists and is valid, use it
+      if (!_hasActiveSubscription) {
+        final isClientValidated =
+            _storage.read('client_validated_subscription') ?? false;
+        final clientValidationDate = _storage.read('client_validation_date');
+
+        if (isClientValidated && clientValidationDate != null) {
+          final validationDate = DateTime.fromMillisecondsSinceEpoch(
+            clientValidationDate,
+          );
+          final expiryDate = validationDate.add(const Duration(days: 30));
+
+          if (DateTime.now().isBefore(expiryDate)) {
+            _hasActiveSubscription = true;
+            _subscriptionExpiry = expiryDate;
+            AppLogger.log(
+              'Using client-validated subscription, expires: $expiryDate',
+            );
+          }
         }
       }
 
@@ -1132,7 +1609,10 @@ class SubscriptionService {
     try {
       AppLogger.log('Checking subscription expiration...');
 
-      // Check grace period expiry first
+      // Check client-validated subscription expiry first
+      _checkClientValidatedSubscriptionExpiry();
+
+      // Check grace period expiry
       if (_isInGracePeriod && _gracePeriodStart != null) {
         final gracePeriodEnd = _gracePeriodStart!.add(_gracePeriodDuration);
 

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class UserModel {
   String userId;
   String firstName;
@@ -22,29 +24,30 @@ class UserModel {
   DateTime? subscriptionExpiryDate;
   String? paymentMethod;
 
-  UserModel(
-      {required this.userId,
-      required this.firstName,
-      required this.lastName,
-      required this.country,
-      required this.emailAddress,
-      required this.mobile,
-      required this.password,
-      required this.accountType,
-      this.companyName,
-      this.representativeFirstName,
-      this.representativeLastName,
-      required this.walletBalances,
-      required this.address,
-      required this.state,
-      required this.city,
-      required this.zipCode,
-      required this.profilePhoto,
-      this.isSubscribed = false,
-      this.subscriptionId,
-      this.subscriptionStatus = 'none',
-      this.subscriptionExpiryDate,
-      this.paymentMethod});
+  UserModel({
+    required this.userId,
+    required this.firstName,
+    required this.lastName,
+    required this.country,
+    required this.emailAddress,
+    required this.mobile,
+    required this.password,
+    required this.accountType,
+    this.companyName,
+    this.representativeFirstName,
+    this.representativeLastName,
+    required this.walletBalances,
+    required this.address,
+    required this.state,
+    required this.city,
+    required this.zipCode,
+    required this.profilePhoto,
+    this.isSubscribed = false,
+    this.subscriptionId,
+    this.subscriptionStatus = 'none',
+    this.subscriptionExpiryDate,
+    this.paymentMethod,
+  });
 
   Map<String, dynamic> toMap() {
     return {
@@ -69,38 +72,61 @@ class UserModel {
       'subscription_id': subscriptionId,
       'subscription_status': subscriptionStatus,
       'subscription_expiry_date': subscriptionExpiryDate?.toIso8601String(),
-      'payment_method': paymentMethod
+      'payment_method': paymentMethod,
     };
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
     // Enhanced null safety to prevent EXC_BAD_ACCESS crashes
     return UserModel(
-        userId: map['userId'] ?? '',
-        firstName: map['first_name'] ?? '',
-        lastName: map['last_name'] ?? '',
-        country: map['country'] ?? '',
-        emailAddress: map['email_address'] ?? '',
-        mobile: map['mobile'] ?? '',
-        password: map['password'] ?? '',
-        accountType: map['account_type'] ?? 'personal',
-        companyName: map['company_name'],
-        representativeFirstName: map['representative_first_name'],
-        representativeLastName: map['representative_last_name'],
-        walletBalances: map['wallet_balances'] != null 
-            ? Map<String, dynamic>.from(map['wallet_balances']) 
-            : <String, dynamic>{},
-        address: map['address'],
-        state: map['state'],
-        city: map['city'],
-        zipCode: map['zip_code'],
-        profilePhoto: map['profile_photo'],
-        isSubscribed: map['is_subscribed'] ?? false,
-        subscriptionId: map['subscription_id'],
-        subscriptionStatus: map['subscription_status'] ?? 'none',
-        subscriptionExpiryDate: map['subscription_expiry_date'] != null 
-            ? DateTime.parse(map['subscription_expiry_date']) 
-            : null,
-        paymentMethod: map['payment_method']);
+      userId: map['userId'] ?? '',
+      firstName: map['first_name'] ?? '',
+      lastName: map['last_name'] ?? '',
+      country: map['country'] ?? '',
+      emailAddress: map['email_address'] ?? '',
+      mobile: map['mobile'] ?? '',
+      password: map['password'] ?? '',
+      accountType: map['account_type'] ?? 'personal',
+      companyName: map['company_name'],
+      representativeFirstName: map['representative_first_name'],
+      representativeLastName: map['representative_last_name'],
+      walletBalances:
+          map['wallet_balances'] != null
+              ? Map<String, dynamic>.from(map['wallet_balances'])
+              : <String, dynamic>{},
+      address: map['address'],
+      state: map['state'],
+      city: map['city'],
+      zipCode: map['zip_code'],
+      profilePhoto: map['profile_photo'],
+      isSubscribed: map['is_subscribed'] ?? false,
+      subscriptionId: map['subscription_id'],
+      subscriptionStatus: map['subscription_status'] ?? 'none',
+      subscriptionExpiryDate: _parseDateTime(map['subscription_expiry_date']),
+      paymentMethod: map['payment_method'],
+    );
+  }
+
+  // Helper method to parse DateTime from various formats
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (e) {
+        return null;
+      }
+    }
+    
+    if (value is DateTime) {
+      return value;
+    }
+    
+    return null;
   }
 }

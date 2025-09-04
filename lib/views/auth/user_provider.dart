@@ -1,5 +1,5 @@
 import 'dart:io';
-import '/utils/app_logger.dart';
+import 'package:xpay/utils/app_logger.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -26,7 +26,7 @@ class UserProvider with ChangeNotifier {
       final result = await ThreadingUtils.runFirebaseOperation(() async {
         User? user = FirebaseAuth.instance.currentUser;
         if (user?.uid == null) return null;
-        
+
         // Try to get from optimized query service with caching
         final userData = await _queryOptimizer.getUserData(user!.uid);
         if (userData != null) {
@@ -167,7 +167,7 @@ class UserProvider with ChangeNotifier {
 
       // Clear local user data
       _user = null;
-      
+
       // Use UI operation for notifying listeners
       await ThreadingUtils.runUIOperation(() async {
         notifyListeners();
@@ -175,9 +175,13 @@ class UserProvider with ChangeNotifier {
 
       AppLogger.log('User account deleted successfully');
     } on FirebaseAuthException catch (e) {
-      AppLogger.log('Firebase Auth error during account deletion: ${e.message}');
+      AppLogger.log(
+        'Firebase Auth error during account deletion: ${e.message}',
+      );
       if (e.code == 'requires-recent-login') {
-        throw Exception('Please log in again before deleting your account for security reasons.');
+        throw Exception(
+          'Please log in again before deleting your account for security reasons.',
+        );
       }
       throw Exception(e.message ?? 'Failed to delete account');
     } catch (e) {

@@ -8,9 +8,7 @@ import '../../routes/routes.dart';
 
 import '../../controller/dashboard_controller.dart';
 import '../../controller/subscription_controller.dart';
-import '../../services/subscription_service.dart';
 import '../../screens/paywall_screen.dart';
-import '../../utils/app_logger.dart';
 import '../../utils/custom_color.dart';
 
 import '../../widgets/navigation_drawer_widget.dart';

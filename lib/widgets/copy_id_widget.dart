@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../utils/custom_color.dart';
-import '../../utils/dimensions.dart';
-import '../../utils/strings.dart';
+import '../utils/custom_color.dart';
+import '../utils/dimensions.dart';
+import '../utils/strings.dart';
 
 class CopyIdInputWidget extends StatelessWidget {
   final TextEditingController controller;

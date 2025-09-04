@@ -22,9 +22,9 @@ class SettingsController extends GetxController {
   final newPasswordController = TextEditingController();
   final confirmController = TextEditingController();
 
-  var selectedLanguage = ''.obs;
+  RxString selectedLanguage = ''.obs;
 
-  void onChangeLanguage(var language) {
+  void onChangeLanguage(String language) {
     selectedLanguage.value = language;
   }
 

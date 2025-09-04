@@ -121,7 +121,7 @@ class NavigationDrawerWidget extends StatelessWidget {
                 'Are you sure you want to sign out?',
                 'Sign Out',
                 'Cancel',
-                () async => await controller.signOut(),
+                () async => controller.signOut(),
               );
             },
           ),

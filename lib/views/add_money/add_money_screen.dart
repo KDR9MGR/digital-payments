@@ -118,12 +118,14 @@ class _AddMoneyMoneyScreenState extends State<AddMoneyMoneyScreen>
       children: [
         _infoInputWidget(context),
         _walletInfoWidget(context),
-        // Show Go Premium widget if user doesn't have active subscription
+        // Show Go Premium widget only if user doesn't have active subscription
         Obx(() {
           if (!subscriptionController.hasActiveSubscription) {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: GoPremiumBanner(showCloseButton: false),
+              child: GoPremiumBanner(
+                showCloseButton: false,
+              ),
             );
           }
           return SizedBox.shrink();

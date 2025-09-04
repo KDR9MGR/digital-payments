@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:get_storage/get_storage.dart';
 import '../utils/app_logger.dart';
 
@@ -17,10 +18,10 @@ class ErrorDebugHelper {
       _storage.remove('recent_errors');
 
       AppLogger.log('All error counts cleared successfully');
-      print('✅ All error counts have been reset');
+      if (kDebugMode) print('✅ All error counts have been reset');
     } catch (e) {
       AppLogger.log('Error clearing error counts: $e');
-      print('❌ Failed to clear error counts: $e');
+      if (kDebugMode) print('❌ Failed to clear error counts: $e');
     }
   }
 
@@ -35,12 +36,14 @@ class ErrorDebugHelper {
       'recentErrors': _storage.read('recent_errors') ?? [],
     };
 
+    if (kDebugMode) {
     print('📊 Current Error Statistics:');
     print('  Total Errors: ${stats['totalErrors']}');
     print('  Network Errors: ${stats['networkErrors']}');
     print('  Payment Errors: ${stats['paymentErrors']}');
     print('  Last Error Time: ${stats['lastErrorTime']}');
     print('  Recent Errors Count: ${(stats['recentErrors'] as List).length}');
+  }
 
     return stats;
   }
@@ -49,12 +52,14 @@ class ErrorDebugHelper {
   static void showRecentErrors() {
     final recentErrors = _storage.read('recent_errors') ?? [];
 
-    print('🔍 Recent Errors (${recentErrors.length}):');
-    for (int i = 0; i < recentErrors.length; i++) {
-      final error = recentErrors[i];
-      print(
-        '  ${i + 1}. ${error['type']}: ${error['message']} (${error['timestamp']})',
-      );
-    }
+    if (kDebugMode) {
+       print('🔍 Recent Errors (${recentErrors.length}):');
+       for (int i = 0; i < recentErrors.length; i++) {
+         final error = recentErrors[i];
+         print(
+           '  ${i + 1}. [${error['timestamp']}] ${error['type']}: ${error['message']}',
+         );
+       }
+     }
   }
 }

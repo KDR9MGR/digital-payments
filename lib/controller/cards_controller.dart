@@ -1,6 +1,7 @@
 import '../data/card_model.dart';
 import '/utils/app_logger.dart';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -87,7 +88,15 @@ class CardsController extends GetxController {
       _cards.add(newCard);
       await _saveCards();
       
-      Get.snackbar('Success', 'Card added successfully');
+      // Navigate to dashboard with success message
+      Get.offAllNamed('/navigationScreen');
+      Get.snackbar(
+        'Success', 
+        'Card added successfully! You can now use it for payments.',
+        backgroundColor: Colors.green.withOpacity(0.8),
+        colorText: Colors.white,
+        duration: Duration(seconds: 3),
+      );
       return true;
     } catch (e) {
       AppLogger.log('Error adding card: $e');

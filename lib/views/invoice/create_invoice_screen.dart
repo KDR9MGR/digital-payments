@@ -65,7 +65,7 @@ class CreateInvoiceScreen extends StatelessWidget {
       children: [
         _infoInputWidget(context, controller),
         _invoiceInfoInputWidget(context, controller),
-        // Show Go Premium widget if user doesn't have active subscription
+        // Show Go Premium widget only if user doesn't have active subscription
         Obx(() {
           if (!subscriptionController.hasActiveSubscription) {
             return Padding(
