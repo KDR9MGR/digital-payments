@@ -1,0 +1,589 @@
+import 'package:http/http.dart' as http;
+import '../utils/app_logger.dart';
+import 'dart:convert';
+import '../config/moov_config.dart';
+
+class MoovService {
+  static final MoovService _instance = MoovService._internal();
+  factory MoovService() => _instance;
+  MoovService._internal();
+
+  final String _baseUrl = MoovConfig.effectiveBaseUrl;
+  final String _apiKey = MoovConfig.apiKey;
+  
+  // Rate limiting tracking
+  final Map<String, int> _dailyTransferCounts = {};
+  final Map<String, DateTime> _lastTransferDates = {};
+
+  // HTTP headers for API requests
+  Map<String, String> get _headers => {
+    'Authorization': 'Bearer $_apiKey',
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'X-Platform': 'Flutter',
+    'X-Environment': MoovConfig.environmentStatus,
+  };
+
+  // Initialize Moov service
+  static Future<void> init() async {
+    try {
+      AppLogger.log('Initializing Moov service...');
+      AppLogger.log('Environment: ${MoovConfig.environmentStatus}');
+      AppLogger.log('Base URL: ${MoovConfig.effectiveBaseUrl}');
+      
+      if (!MoovConfig.isConfigured) {
+        throw Exception('Moov service is not properly configured');
+      }
+      
+      if (MoovConfig.isProduction && !MoovConfig.isProductionReady) {
+        throw Exception('Moov service is not ready for production');
+      }
+      
+      AppLogger.log('Moov Service initialized successfully');
+    } catch (e) {
+      AppLogger.log('Error initializing Moov Service: $e');
+      rethrow;
+    }
+  }
+
+  // Create a customer account
+  Future<Map<String, dynamic>?> createAccount({
+    required String email,
+    required String firstName,
+    required String lastName,
+    String? phone,
+    required String userId,
+  }) async {
+    // In test mode, return a mock account ID
+    if (MoovConfig.testMode) {
+      AppLogger.log('Test mode: Creating mock Moov account for: $email');
+      await Future.delayed(
+        Duration(milliseconds: 300),
+      ); // Simulate network delay
+      return {
+        'success': true,
+        'accountId': 'test_account_${userId.substring(0, 8)}',
+        'data': {
+          'accountID': 'test_account_${userId.substring(0, 8)}',
+          'status': 'active',
+        },
+      };
+    }
+
+    try {
+      AppLogger.log('Creating Moov account for: $email');
+
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/accounts'),
+            headers: _headers,
+            body: jsonEncode({
+              'accountType': 'individual',
+              'profile': {
+                'individual': {
+                  'name': {'firstName': firstName, 'lastName': lastName},
+                  'email': email,
+                  'phone': {'number': phone ?? '', 'countryCode': '1'},
+                },
+              },
+              'termsOfService': {
+                'token':
+                    'kgT1uxoMAk7QKuyJcmQE8nqW_HjpyuXBabiXPi6T83fUQoxGpWKvqPNDfhruYEp6_JW7HjooGhBs5mAvXNPMoA',
+              },
+              'capabilities': ['transfers', 'send-funds', 'collect-funds'],
+              'foreignId': userId,
+            }),
+          )
+          .timeout(Duration(seconds: 10)); // Add timeout
+
+      AppLogger.log('Moov API response: ${response.statusCode}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        AppLogger.log(
+          'Moov account created successfully: ${data['accountID']}',
+        );
+        return {'success': true, 'accountId': data['accountID'], 'data': data};
+      } else {
+        AppLogger.log(
+          'Moov API error: ${response.statusCode} - ${response.body}',
+        );
+        return {
+          'success': false,
+          'error':
+              'API Error: ${response.statusCode} - ${response.reasonPhrase}',
+        };
+      }
+    } catch (e) {
+      AppLogger.log('Error creating Moov account: $e');
+      String errorMessage = 'Network error';
+
+      if (e.toString().contains('TimeoutException')) {
+        errorMessage =
+            'Request timeout - please check your internet connection';
+      } else if (e.toString().contains('SocketException')) {
+        errorMessage = 'Network connection failed';
+      } else if (e.toString().contains('FormatException')) {
+        errorMessage = 'Invalid response format';
+      }
+
+      return {'success': false, 'error': errorMessage};
+    }
+  }
+
+  // Create a payment method
+  Future<Map<String, dynamic>?> createPaymentMethod({
+    required String accountId,
+    required Map<String, dynamic> cardData,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/accounts/$accountId/payment-methods'),
+        headers: _headers,
+        body: jsonEncode({
+          'card': {
+            'cardNumber': cardData['number'],
+            'cardCvv': cardData['cvc'],
+            'expiration': {
+              'month': cardData['exp_month'].toString(),
+              'year': cardData['exp_year'].toString(),
+            },
+            'holderName': cardData['name'],
+            'billingAddress': {
+              'addressLine1': cardData['address_line1'] ?? '',
+              'city': cardData['address_city'] ?? '',
+              'stateOrProvince': cardData['address_state'] ?? '',
+              'postalCode': cardData['address_zip'] ?? '',
+              'country': cardData['address_country'] ?? 'US',
+            },
+          },
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'paymentMethodId': data['paymentMethodID'],
+          'data': data,
+        };
+      } else {
+        AppLogger.log(
+          'Error creating payment method: ${response.statusCode} - ${response.body}',
+        );
+        return {
+          'success': false,
+          'error': 'Failed to create payment method: ${response.reasonPhrase}',
+        };
+      }
+    } catch (e) {
+      AppLogger.log('Error creating payment method: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
+  // NOTE: Subscription payment processing has been removed
+  // Moov is now only used for send/receive money functionality
+  // Subscriptions are handled via in-app purchases
+
+  // Get account details
+  Future<Map<String, dynamic>?> getAccount(String accountId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/accounts/$accountId'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data};
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to get account: ${response.reasonPhrase}',
+        };
+      }
+    } catch (e) {
+      AppLogger.log('Error getting account: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
+  // Get payment methods for an account
+  Future<List<Map<String, dynamic>>> getPaymentMethods(String accountId) async {
+    if (MoovConfig.testMode) {
+      return [
+        {
+          'paymentMethodID': 'pm_test_wallet',
+          'type': 'moov-wallet',
+          'status': 'active'
+        }
+      ];
+    }
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/accounts/$accountId/payment-methods'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data ?? []);
+      } else {
+        AppLogger.log(
+          'Error getting payment methods: ${response.statusCode} - ${response.body}',
+        );
+        return [];
+      }
+    } catch (e) {
+      AppLogger.log('Error getting payment methods: $e');
+      return [];
+    }
+  }
+
+  // Get transaction history
+  Future<List<Map<String, dynamic>>> getTransactionHistory(
+    String accountId,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/accounts/$accountId/transfers'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data ?? []);
+      } else {
+        AppLogger.log(
+          'Error getting transaction history: ${response.statusCode} - ${response.body}',
+        );
+        return [];
+      }
+    } catch (e) {
+      AppLogger.log('Error getting transaction history: $e');
+      return [];
+    }
+  }
+
+  // Delete payment method
+  Future<bool> deletePaymentMethod(
+    String accountId,
+    String paymentMethodId,
+  ) async {
+    try {
+      final response = await http.delete(
+        Uri.parse(
+          '$_baseUrl/accounts/$accountId/payment-methods/$paymentMethodId',
+        ),
+        headers: _headers,
+      );
+
+      return response.statusCode == 204;
+    } catch (e) {
+      AppLogger.log('Error deleting payment method: $e');
+      return false;
+    }
+  }
+
+  // Process P2P transfer with rate limiting and validation
+  Future<Map<String, dynamic>?> processP2PTransfer({
+    required String senderAccountId,
+    required String recipientAccountId,
+    required double amount,
+    required String currency,
+    String? description,
+  }) async {
+    try {
+      // Validate transfer amount
+      if (amount < MoovConfig.minTransferAmount) {
+        return {
+          'success': false,
+          'error': 'Transfer amount must be at least \$${MoovConfig.minTransferAmount}',
+        };
+      }
+      
+      if (amount > MoovConfig.maxTransferAmount) {
+        return {
+          'success': false,
+          'error': 'Transfer amount cannot exceed \$${MoovConfig.maxTransferAmount}',
+        };
+      }
+      
+      // Check rate limiting
+      if (!_checkRateLimit(senderAccountId)) {
+        return {
+          'success': false,
+          'error': 'Daily transfer limit exceeded. Maximum ${MoovConfig.maxTransfersPerDay} transfers per day.',
+        };
+      }
+      
+      if (MoovConfig.testMode) {
+        AppLogger.log('Test mode: Simulating P2P transfer ${amount.toStringAsFixed(2)} $currency from $senderAccountId to $recipientAccountId');
+        await Future.delayed(Duration(milliseconds: 300));
+        _incrementTransferCount(senderAccountId);
+        return {
+          'success': true,
+          'transferId': 'test_tx_${DateTime.now().millisecondsSinceEpoch}',
+          'status': 'completed',
+          'data': {
+            'transferID': 'test_tx_${DateTime.now().millisecondsSinceEpoch}',
+            'status': 'completed'
+          }
+        };
+      }
+      AppLogger.log('Processing P2P transfer from $senderAccountId to $recipientAccountId');
+
+      final requestBody = {
+        'source': {
+          'account': {'accountID': senderAccountId},
+        },
+        'destination': {
+          'account': {'accountID': recipientAccountId},
+        },
+        'amount': {
+          'currency': currency,
+          'value': (amount * 100).toInt(), // Convert to cents
+        },
+        'description': description ?? 'P2P Transfer',
+        'metadata': {
+          'transferType': 'p2p',
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      };
+
+      // Attempt transfer with retry logic
+      int attempts = 0;
+      
+      while (attempts < MoovConfig.maxRetries) {
+        attempts++;
+        
+        try {
+          final response = await http.post(
+            Uri.parse('$_baseUrl/transfers'),
+            headers: _headers,
+            body: jsonEncode(requestBody),
+          );
+
+          if (response.statusCode == 200 || response.statusCode == 201) {
+            final data = jsonDecode(response.body);
+            AppLogger.log('P2P transfer successful: ${data['transferID']}');
+            _incrementTransferCount(senderAccountId);
+            return {
+              'success': true,
+              'transferId': data['transferID'],
+              'status': data['status'],
+              'data': data,
+            };
+          } else if (response.statusCode >= 500 && attempts < MoovConfig.maxRetries) {
+            // Retry on server errors
+            AppLogger.log('Server error (${response.statusCode}), retrying... Attempt $attempts/${MoovConfig.maxRetries}');
+            await Future.delayed(MoovConfig.retryDelay * attempts);
+            continue;
+          } else {
+            AppLogger.log(
+              'Error processing P2P transfer: ${response.statusCode} - ${response.body}',
+            );
+            return {
+              'success': false,
+              'error': 'Transfer failed: ${_getErrorMessage(response.statusCode, response.body)}',
+            };
+          }
+        } catch (e) {
+          if (attempts < MoovConfig.maxRetries) {
+            AppLogger.log('Network error, retrying... Attempt $attempts/${MoovConfig.maxRetries}: $e');
+            await Future.delayed(MoovConfig.retryDelay * attempts);
+            continue;
+          } else {
+            rethrow;
+          }
+        }
+      }
+      
+      return {
+        'success': false,
+        'error': 'Transfer failed after ${MoovConfig.maxRetries} attempts',
+      };
+    } catch (e) {
+      AppLogger.log('Error processing P2P transfer: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
+  // Get or create Moov account for user
+  Future<String?> getOrCreateUserAccount({
+    required String userId,
+    required String email,
+    required String firstName,
+    required String lastName,
+    String? phone,
+  }) async {
+    try {
+      if (MoovConfig.testMode) {
+        return 'test_account_${userId.substring(0, 8)}';
+      }
+      // First, try to get existing account by foreign ID
+      final existingAccount = await _getAccountByForeignId(userId);
+      if (existingAccount != null) {
+        return existingAccount;
+      }
+
+      // Create new account if not exists
+      final result = await createAccount(
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        userId: userId,
+      );
+
+      if (result?['success'] == true) {
+        return result?['accountId'];
+      }
+      return null;
+    } catch (e) {
+      AppLogger.log('Error getting or creating user account: $e');
+      return null;
+    }
+  }
+
+  // Helper method to get account by foreign ID
+  Future<String?> _getAccountByForeignId(String foreignId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/accounts?foreignID=$foreignId'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List && data.isNotEmpty) {
+          return data.first['accountID'];
+        }
+      }
+      return null;
+    } catch (e) {
+      AppLogger.log('Error getting account by foreign ID: $e');
+      return null;
+    }
+  }
+
+  // Rate limiting helper methods
+  bool _checkRateLimit(String accountId) {
+    final today = DateTime.now();
+    final lastTransferDate = _lastTransferDates[accountId];
+    
+    // Reset counter if it's a new day
+    if (lastTransferDate == null || 
+        !_isSameDay(lastTransferDate, today)) {
+      _dailyTransferCounts[accountId] = 0;
+      _lastTransferDates[accountId] = today;
+    }
+    
+    final currentCount = _dailyTransferCounts[accountId] ?? 0;
+    return currentCount < MoovConfig.maxTransfersPerDay;
+  }
+  
+  void _incrementTransferCount(String accountId) {
+    _dailyTransferCounts[accountId] = (_dailyTransferCounts[accountId] ?? 0) + 1;
+    _lastTransferDates[accountId] = DateTime.now();
+  }
+  
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+           date1.month == date2.month &&
+           date1.day == date2.day;
+  }
+  
+  String _getErrorMessage(int statusCode, String responseBody) {
+    try {
+      final errorData = jsonDecode(responseBody);
+      if (errorData['error'] != null) {
+        return errorData['error']['message'] ?? 'Unknown error';
+      }
+    } catch (e) {
+      // Fallback to status code message
+    }
+    
+    switch (statusCode) {
+      case 400:
+        return 'Invalid request parameters';
+      case 401:
+        return 'Authentication failed';
+      case 403:
+        return 'Insufficient permissions';
+      case 404:
+        return 'Account or resource not found';
+      case 429:
+        return 'Rate limit exceeded';
+      case 500:
+        return 'Internal server error';
+      default:
+        return 'Transfer failed (Error $statusCode)';
+    }
+  }
+
+  // Verify bank account with Moov
+  Future<Map<String, dynamic>> verifyBankAccount({
+    required String accountNumber,
+    required String routingNumber,
+    required String accountType,
+    required String accountHolderName,
+  }) async {
+    try {
+      if (MoovConfig.testMode) {
+        // Mock verification for testing
+        await Future.delayed(Duration(seconds: 3));
+        return {
+          'status': 'verified',
+          'moovAccountId': 'test_bank_${DateTime.now().millisecondsSinceEpoch}',
+        };
+      }
+      
+      AppLogger.log('Verifying bank account with Moov');
+      
+      final response = await http.post(
+        Uri.parse('$_baseUrl/bank-accounts/verify'),
+        headers: _headers,
+        body: jsonEncode({
+          'account': {
+            'accountNumber': accountNumber,
+            'routingNumber': routingNumber,
+            'accountType': accountType.toLowerCase(),
+          },
+          'accountHolder': {
+            'name': accountHolderName,
+          },
+        }),
+      );
+      
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        AppLogger.log('Bank account verification successful');
+        return {
+          'status': 'verified',
+          'moovAccountId': data['accountID'],
+        };
+      } else {
+        AppLogger.log('Bank account verification failed: ${response.statusCode} - ${response.body}');
+        return {
+          'status': 'failed',
+          'error': _getErrorMessage(response.statusCode, response.body),
+        };
+      }
+    } catch (e) {
+      AppLogger.log('Error verifying bank account: $e');
+      return {
+        'status': 'failed',
+        'error': 'Verification failed: $e',
+      };
+    }
+  }
+
+  // Webhook verification (for backend use)
+  bool verifyWebhookSignature(String payload, String signature, String secret) {
+    // Implement webhook signature verification
+    // This would typically be done in your backend
+    return true;
+  }
+}

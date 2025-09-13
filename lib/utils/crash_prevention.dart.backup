@@ -1,0 +1,128 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'app_logger.dart';
+
+/// Utility class to prevent and handle crashes
+class CrashPrevention {
+  static bool _isInitialized = false;
+  static Timer? _memoryCheckTimer;
+
+  /// Initialize crash prevention
+  static void initialize() {
+    if (_isInitialized) return;
+
+    try {
+      // Set up periodic memory checks
+      _memoryCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+        _checkMemoryUsage();
+      });
+
+      // Set up platform-specific crash handlers
+      if (Platform.isIOS || Platform.isAndroid) {
+        _setupPlatformCrashHandlers();
+      }
+
+      _isInitialized = true;
+      AppLogger.info('Crash prevention initialized', 'CrashPrevention');
+    } catch (e) {
+      AppLogger.error(
+        'Failed to initialize crash prevention',
+        'CrashPrevention',
+        e,
+      );
+    }
+  }
+
+  /// Set up platform-specific crash handlers
+  static void _setupPlatformCrashHandlers() {
+    try {
+      if (Platform.isIOS) {
+        // iOS-specific error handling
+        FlutterError.onError = (FlutterErrorDetails details) {
+          FlutterError.presentError(details);
+          AppLogger.error(
+            'iOS Flutter error: ${details.exception}',
+            'CrashPrevention',
+            details.stack,
+          );
+        };
+      }
+      
+      if (kDebugMode) {
+        AppLogger.debug(
+          'Platform crash handlers set up for ${Platform.operatingSystem}',
+          'CrashPrevention',
+        );
+      }
+    } catch (e) {
+      print('Failed to setup platform crash handlers: $e'); // Fallback to print
+      AppLogger.error(
+        'Failed to setup platform crash handlers',
+        'CrashPrevention',
+        e,
+      );
+    }
+  }
+
+  /// Check memory usage and clean up if necessary
+  static void _checkMemoryUsage() {
+    try {
+      // Force garbage collection if available
+      if (kDebugMode) {
+        AppLogger.debug('Memory check performed', 'CrashPrevention');
+      }
+    } catch (e) {
+      AppLogger.error('Memory check failed', 'CrashPrevention', e);
+    }
+  }
+
+  /// Safely execute a function with crash protection
+  static Future<T> safeExecute<T>(
+    Future<T> Function() function, {
+    String? operationName,
+    T? defaultValue,
+  }) async {
+    try {
+      return await function();
+    } catch (e) {
+      AppLogger.error(
+        'Safe execute error: ${operationName ?? 'Unknown operation'}',
+        'CrashPrevention',
+        e,
+      );
+
+      // Return default value to prevent crashes
+      if (defaultValue != null) return defaultValue;
+
+      // Return appropriate default based on type
+      if (T == bool) return false as T;
+      if (T == String) return '' as T;
+      if (T == int) return 0 as T;
+      if (T == double) return 0.0 as T;
+      if (T == List) return [] as T;
+      if (T == Map) return {} as T;
+
+      rethrow; // Re-throw if no default can be determined
+    }
+  }
+
+  /// Dispose crash prevention resources
+  static void dispose() {
+    try {
+      _memoryCheckTimer?.cancel();
+      _memoryCheckTimer = null;
+      _isInitialized = false;
+      AppLogger.info('Crash prevention disposed', 'CrashPrevention');
+    } catch (e) {
+      AppLogger.error(
+        'Failed to dispose crash prevention',
+        'CrashPrevention',
+        e,
+      );
+    }
+  }
+
+  /// Check if crash prevention is initialized
+  static bool get isInitialized => _isInitialized;
+}

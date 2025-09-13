@@ -1,0 +1,182 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
+
+import '../../utils/custom_color.dart';
+import '../../utils/custom_style.dart';
+import '../../utils/dimensions.dart';
+import '../../utils/strings.dart';
+import '../../widgets/primary_appbar.dart';
+import '../../widgets/subscription_guard.dart';
+
+class ScanQrCodeScreen extends StatefulWidget {
+  const ScanQrCodeScreen({super.key});
+
+  @override
+  ScanQrCodeScreenState createState() => ScanQrCodeScreenState();
+}
+
+class ScanQrCodeScreenState extends State<ScanQrCodeScreen> {
+  final qrKey = GlobalKey(debugLabel: 'QR');
+  QRViewController? controller;
+
+  Barcode? barcode;
+
+  @override
+  void dispose() {
+    // QR controller disposal is now handled automatically by the library
+    super.dispose();
+  }
+
+  // In order to get hot reload to work we need to pause the camera if the platform
+  // is android, or resume the camera if the platform is iOS.
+  @override
+  void reassemble() async {
+    super.reassemble();
+    if (Platform.isAndroid) {
+      await controller?.pauseCamera();
+    } else if (Platform.isIOS) {
+      await controller?.resumeCamera();
+    }
+  }
+
+  void readQr() async {
+    if (barcode != null && barcode!.code != null) {
+      await controller?.pauseCamera();
+      Get.back(result: barcode!.code);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: PrimaryAppBar(
+        appbarColor: CustomColor.primaryColor,
+        backgroundColor: CustomColor.primaryColor,
+        autoLeading: false,
+        elevation: 1,
+        appBar: AppBar(),
+        title: Text(
+          Strings.scanQrTitle,
+          style: CustomStyle.commonTextTitleWhite,
+        ),
+        leading: IconButton(
+          onPressed: () {
+            Get.back();
+          },
+          icon: Icon(
+            Icons.arrow_back_ios,
+            color: Colors.white,
+            size: Dimensions.iconSizeDefault * 1.4,
+          ),
+        ),
+        appbarSize: Dimensions.defaultAppBarHeight,
+        toolbarHeight: Dimensions.defaultAppBarHeight,
+      ),
+      backgroundColor: CustomColor.screenBGColor,
+      body: SubscriptionGuard(
+        customMessage: 'QR code scanning requires a premium subscription. Upgrade now to scan QR codes.',
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height,
+          width: MediaQuery.of(context).size.width,
+          child: _bodyWidget(context),
+        ),
+      ),
+    );
+  }
+
+  // body widget containing all widget elements
+  Center _bodyWidget(BuildContext context) {
+    return Center(
+      child: Stack(
+        children: [
+          Positioned(child: _scanQrCodeWidget(context)),
+          Positioned(
+            bottom: 50,
+            right: 20,
+            left: 20,
+            child: _qrCodeBottomMessageWidget(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // QR code scan with qr code image
+  SizedBox _scanQrCodeWidget(BuildContext context) {
+    return SizedBox(
+      width: MediaQuery.of(context).size.width,
+      height: MediaQuery.of(context).size.height,
+      child: _buildQrViewWidget(context),
+    );
+  }
+
+  // bottom qr code message
+  InkWell _qrCodeBottomMessageWidget(BuildContext context) {
+    return InkWell(
+      onTap: () async {
+        await controller?.resumeCamera();
+        setState(() {});
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: Dimensions.defaultPaddingSize,
+        ),
+        height: 70,
+        width: MediaQuery.of(context).size.width,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(Dimensions.radius),
+        ),
+        child: Row(
+          children: [
+            Image.asset(Strings.qrCodeIconImagePath),
+            SizedBox(width: Dimensions.widthSize),
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text(
+                  Strings.qrCodeMessage,
+                  style: TextStyle(
+                    color: CustomColor.primaryColor,
+                    fontSize: Dimensions.smallTextSize * 0.9,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  softWrap: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  QRView _buildQrViewWidget(BuildContext context) {
+    return QRView(
+      key: qrKey,
+      onQRViewCreated: onQRViewCreated,
+      overlay: QrScannerOverlayShape(
+        cutOutSize: MediaQuery.of(context).size.width * 0.6,
+        borderWidth: 8,
+        borderLength: 20,
+        borderRadius: 10,
+        borderColor: CustomColor.primaryColor,
+      ),
+    );
+  }
+
+  void onQRViewCreated(QRViewController controller) {
+    setState(() => this.controller = controller);
+    // this.controller = controller;
+    controller.scannedDataStream.listen(
+      (barcode) => setState(() {
+        this.barcode = barcode;
+        // print(this.barcode!.code);
+        readQr();
+      }),
+    );
+  }
+}

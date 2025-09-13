@@ -1,0 +1,19 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    avoid_print: false
+    prefer_single_quotes: true
+    use_build_context_synchronously: false
+    constant_identifier_names: false
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  errors:
+    unused_import: info
+    unused_element: info
+    deprecated_member_use: info
+    use_build_context_synchronously: info
+    equal_keys_in_map: ignore
