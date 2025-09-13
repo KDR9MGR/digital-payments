@@ -118,7 +118,14 @@ class InternalTransferController extends GetxController {
       }
     } catch (e) {
       isRecipientValid.value = false;
-      recipientValidationMessage.value = 'Error validating recipient';
+      // Provide more specific error messages based on the error type
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        recipientValidationMessage.value = 'Network error. Please check your connection and try again';
+      } else if (e.toString().contains('timeout')) {
+        recipientValidationMessage.value = 'Request timed out. Please try again';
+      } else {
+        recipientValidationMessage.value = 'Unable to validate recipient. Please try again';
+      }
       AppLogger.error(
         'Error validating recipient: $e',
         tag: 'InternalTransferController',

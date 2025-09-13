@@ -290,7 +290,7 @@ class InternalTransferService {
               .get();
 
       if (recipientQuery.docs.isEmpty) {
-        return {'valid': false, 'message': 'User with email $email not found'};
+        return {'valid': false, 'message': 'No user found with this email address'};
       }
 
       final recipientData = recipientQuery.docs.first.data();
@@ -306,7 +306,20 @@ class InternalTransferService {
         'Error validating recipient: $e',
         tag: 'InternalTransferService',
       );
-      return {'valid': false, 'message': 'Error validating recipient'};
+      
+      // Provide more specific error messages
+      String errorMessage;
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        errorMessage = 'Network error. Please check your connection';
+      } else if (e.toString().contains('permission') || e.toString().contains('denied')) {
+        errorMessage = 'Permission denied. Please try again';
+      } else if (e.toString().contains('timeout')) {
+        errorMessage = 'Request timed out. Please try again';
+      } else {
+        errorMessage = 'Unable to validate recipient. Please try again';
+      }
+      
+      return {'valid': false, 'message': errorMessage};
     }
   }
 
