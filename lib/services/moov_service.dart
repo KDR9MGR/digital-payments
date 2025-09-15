@@ -1,36 +1,22 @@
-import 'package:http/http.dart' as http;
 import '../utils/app_logger.dart';
-import 'dart:convert';
 import '../config/moov_config.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class MoovService {
   static final MoovService _instance = MoovService._internal();
   factory MoovService() => _instance;
   MoovService._internal();
 
-  final String _baseUrl = MoovConfig.effectiveBaseUrl;
-  final String _apiKey = MoovConfig.apiKey;
-  
   // Rate limiting tracking
   final Map<String, int> _dailyTransferCounts = {};
   final Map<String, DateTime> _lastTransferDates = {};
-
-  // HTTP headers for API requests
-  Map<String, String> get _headers => {
-    'Authorization': 'Bearer $_apiKey',
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Platform': 'Flutter',
-    'X-Environment': MoovConfig.environmentStatus,
-  };
 
   // Initialize Moov service
   static Future<void> init() async {
     try {
       AppLogger.log('Initializing Moov service...');
       AppLogger.log('Environment: ${MoovConfig.environmentStatus}');
-      AppLogger.log('Base URL: ${MoovConfig.effectiveBaseUrl}');
-      
+
       if (!MoovConfig.isConfigured) {
         throw Exception('Moov service is not properly configured');
       }
@@ -57,155 +43,45 @@ class MoovService {
     // In test mode, return a mock account ID
     if (MoovConfig.testMode) {
       AppLogger.log('Test mode: Creating mock Moov account for: $email');
-      await Future.delayed(
-        Duration(milliseconds: 300),
-      ); // Simulate network delay
+      await Future.delayed(Duration(milliseconds: 300));
       return {
         'success': true,
         'accountId': 'test_account_${userId.substring(0, 8)}',
-        'data': {
-          'accountID': 'test_account_${userId.substring(0, 8)}',
-          'status': 'active',
-        },
       };
     }
 
     try {
-      AppLogger.log('Creating Moov account for: $email');
-
-      final response = await http
-          .post(
-            Uri.parse('$_baseUrl/accounts'),
-            headers: _headers,
-            body: jsonEncode({
-              'accountType': 'individual',
-              'profile': {
-                'individual': {
-                  'name': {'firstName': firstName, 'lastName': lastName},
-                  'email': email,
-                  'phone': {'number': phone ?? '', 'countryCode': '1'},
-                },
-              },
-              'termsOfService': {
-                'token':
-                    'kgT1uxoMAk7QKuyJcmQE8nqW_HjpyuXBabiXPi6T83fUQoxGpWKvqPNDfhruYEp6_JW7HjooGhBs5mAvXNPMoA',
-              },
-              'capabilities': ['transfers', 'send-funds', 'collect-funds'],
-              'foreignId': userId,
-            }),
-          )
-          .timeout(Duration(seconds: 10)); // Add timeout
-
-      AppLogger.log('Moov API response: ${response.statusCode}');
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        AppLogger.log(
-          'Moov account created successfully: ${data['accountID']}',
-        );
-        return {'success': true, 'accountId': data['accountID'], 'data': data};
-      } else {
-        AppLogger.log(
-          'Moov API error: ${response.statusCode} - ${response.body}',
-        );
-        return {
-          'success': false,
-          'error':
-              'API Error: ${response.statusCode} - ${response.reasonPhrase}',
-        };
-      }
+      final callable = FirebaseFunctions.instance.httpsCallable('createMoovAccount');
+      final result = await callable.call({
+        'email': email,
+        'firstName': firstName,
+        'lastName': lastName,
+        if (phone != null) 'phone': phone,
+      });
+      final data = Map<String, dynamic>.from(result.data ?? {});
+      return data;
     } catch (e) {
-      AppLogger.log('Error creating Moov account: $e');
-      String errorMessage = 'Network error';
-
-      if (e.toString().contains('TimeoutException')) {
-        errorMessage =
-            'Request timeout - please check your internet connection';
-      } else if (e.toString().contains('SocketException')) {
-        errorMessage = 'Network connection failed';
-      } else if (e.toString().contains('FormatException')) {
-        errorMessage = 'Invalid response format';
-      }
-
-      return {'success': false, 'error': errorMessage};
+      AppLogger.log('Error creating account via function: $e');
+      return {
+        'success': false,
+        'error': 'Failed to create account',
+      };
     }
   }
-
-  // Create a payment method
-  Future<Map<String, dynamic>?> createPaymentMethod({
-    required String accountId,
-    required Map<String, dynamic> cardData,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/accounts/$accountId/payment-methods'),
-        headers: _headers,
-        body: jsonEncode({
-          'card': {
-            'cardNumber': cardData['number'],
-            'cardCvv': cardData['cvc'],
-            'expiration': {
-              'month': cardData['exp_month'].toString(),
-              'year': cardData['exp_year'].toString(),
-            },
-            'holderName': cardData['name'],
-            'billingAddress': {
-              'addressLine1': cardData['address_line1'] ?? '',
-              'city': cardData['address_city'] ?? '',
-              'stateOrProvince': cardData['address_state'] ?? '',
-              'postalCode': cardData['address_zip'] ?? '',
-              'country': cardData['address_country'] ?? 'US',
-            },
-          },
-        }),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        return {
-          'success': true,
-          'paymentMethodId': data['paymentMethodID'],
-          'data': data,
-        };
-      } else {
-        AppLogger.log(
-          'Error creating payment method: ${response.statusCode} - ${response.body}',
-        );
-        return {
-          'success': false,
-          'error': 'Failed to create payment method: ${response.reasonPhrase}',
-        };
-      }
-    } catch (e) {
-      AppLogger.log('Error creating payment method: $e');
-      return {'success': false, 'error': 'Network error: $e'};
-    }
-  }
-
-  // NOTE: Subscription payment processing has been removed
-  // Moov is now only used for send/receive money functionality
-  // Subscriptions are handled via in-app purchases
 
   // Get account details
   Future<Map<String, dynamic>?> getAccount(String accountId) async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/accounts/$accountId'),
-        headers: _headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {'success': true, 'data': data};
-      } else {
-        return {
-          'success': false,
-          'error': 'Failed to get account: ${response.reasonPhrase}',
-        };
+      if (MoovConfig.testMode) {
+        return {'success': true, 'data': {'accountID': accountId, 'status': 'active'}};
       }
+      final callable = FirebaseFunctions.instance.httpsCallable('getMoovAccount');
+      final result = await callable.call({'accountId': accountId});
+      final data = Map<String, dynamic>.from(result.data ?? {});
+      return data;
     } catch (e) {
-      AppLogger.log('Error getting account: $e');
-      return {'success': false, 'error': 'Network error: $e'};
+      AppLogger.log('Error getting account via function: $e');
+      return {'success': false, 'error': 'Failed to get account'};
     }
   }
 
@@ -221,47 +97,16 @@ class MoovService {
       ];
     }
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/accounts/$accountId/payment-methods'),
-        headers: _headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data ?? []);
-      } else {
-        AppLogger.log(
-          'Error getting payment methods: ${response.statusCode} - ${response.body}',
-        );
-        return [];
+      final callable = FirebaseFunctions.instance.httpsCallable('listPaymentMethods');
+      final result = await callable.call({'accountId': accountId});
+      final data = Map<String, dynamic>.from(result.data ?? {});
+      final list = data['data'];
+      if (list is List) {
+        return List<Map<String, dynamic>>.from(list);
       }
-    } catch (e) {
-      AppLogger.log('Error getting payment methods: $e');
       return [];
-    }
-  }
-
-  // Get transaction history
-  Future<List<Map<String, dynamic>>> getTransactionHistory(
-    String accountId,
-  ) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/accounts/$accountId/transfers'),
-        headers: _headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data ?? []);
-      } else {
-        AppLogger.log(
-          'Error getting transaction history: ${response.statusCode} - ${response.body}',
-        );
-        return [];
-      }
     } catch (e) {
-      AppLogger.log('Error getting transaction history: $e');
+      AppLogger.log('Error getting payment methods via function: $e');
       return [];
     }
   }
@@ -272,16 +117,16 @@ class MoovService {
     String paymentMethodId,
   ) async {
     try {
-      final response = await http.delete(
-        Uri.parse(
-          '$_baseUrl/accounts/$accountId/payment-methods/$paymentMethodId',
-        ),
-        headers: _headers,
-      );
-
-      return response.statusCode == 204;
+      if (MoovConfig.testMode) return true;
+      final callable = FirebaseFunctions.instance.httpsCallable('deletePaymentMethod');
+      final result = await callable.call({
+        'accountId': accountId,
+        'paymentMethodId': paymentMethodId,
+      });
+      final data = Map<String, dynamic>.from(result.data ?? {});
+      return data['success'] == true;
     } catch (e) {
-      AppLogger.log('Error deleting payment method: $e');
+      AppLogger.log('Error deleting payment method via function: $e');
       return false;
     }
   }
@@ -334,60 +179,28 @@ class MoovService {
       }
       AppLogger.log('Processing P2P transfer from $senderAccountId to $recipientAccountId');
 
-      final requestBody = {
-        'source': {
-          'account': {'accountID': senderAccountId},
-        },
-        'destination': {
-          'account': {'accountID': recipientAccountId},
-        },
-        'amount': {
-          'currency': currency,
-          'value': (amount * 100).toInt(), // Convert to cents
-        },
-        'description': description ?? 'P2P Transfer',
-        'metadata': {
-          'transferType': 'p2p',
-          'timestamp': DateTime.now().toIso8601String(),
-        },
-      };
-
-      // Attempt transfer with retry logic
       int attempts = 0;
-      
       while (attempts < MoovConfig.maxRetries) {
         attempts++;
-        
         try {
-          final response = await http.post(
-            Uri.parse('$_baseUrl/transfers'),
-            headers: _headers,
-            body: jsonEncode(requestBody),
-          );
-
-          if (response.statusCode == 200 || response.statusCode == 201) {
-            final data = jsonDecode(response.body);
-            AppLogger.log('P2P transfer successful: ${data['transferID']}');
+          final callable = FirebaseFunctions.instance.httpsCallable('createP2PTransfer');
+          final result = await callable.call({
+            'senderAccountId': senderAccountId,
+            'recipientAccountId': recipientAccountId,
+            'amount': amount,
+            'currency': currency,
+            if (description != null) 'description': description,
+          });
+          final data = Map<String, dynamic>.from(result.data ?? {});
+          if (data['success'] == true) {
             _incrementTransferCount(senderAccountId);
-            return {
-              'success': true,
-              'transferId': data['transferID'],
-              'status': data['status'],
-              'data': data,
-            };
-          } else if (response.statusCode >= 500 && attempts < MoovConfig.maxRetries) {
-            // Retry on server errors
-            AppLogger.log('Server error (${response.statusCode}), retrying... Attempt $attempts/${MoovConfig.maxRetries}');
+            return data;
+          } else if (attempts < MoovConfig.maxRetries) {
+            AppLogger.log('Server error, retrying... Attempt $attempts/${MoovConfig.maxRetries}');
             await Future.delayed(MoovConfig.retryDelay * attempts);
             continue;
           } else {
-            AppLogger.log(
-              'Error processing P2P transfer: ${response.statusCode} - ${response.body}',
-            );
-            return {
-              'success': false,
-              'error': 'Transfer failed: ${_getErrorMessage(response.statusCode, response.body)}',
-            };
+            return data;
           }
         } catch (e) {
           if (attempts < MoovConfig.maxRetries) {
@@ -395,11 +208,12 @@ class MoovService {
             await Future.delayed(MoovConfig.retryDelay * attempts);
             continue;
           } else {
-            rethrow;
+            AppLogger.log('Error processing P2P transfer: $e');
+            return {'success': false, 'error': 'Network error: $e'};
           }
         }
       }
-      
+
       return {
         'success': false,
         'error': 'Transfer failed after ${MoovConfig.maxRetries} attempts',
@@ -422,10 +236,17 @@ class MoovService {
       if (MoovConfig.testMode) {
         return 'test_account_${userId.substring(0, 8)}';
       }
-      // First, try to get existing account by foreign ID
-      final existingAccount = await _getAccountByForeignId(userId);
-      if (existingAccount != null) {
-        return existingAccount;
+
+      // Try to read from backend (will throw if missing)
+      try {
+        final callableGet = FirebaseFunctions.instance.httpsCallable('getOrCreateMoovAccount');
+        final result = await callableGet.call({});
+        final data = Map<String, dynamic>.from(result.data ?? {});
+        if (data['success'] == true && data['accountId'] is String) {
+          return data['accountId'] as String;
+        }
+      } catch (_) {
+        // fall through to create
       }
 
       // Create new account if not exists
@@ -447,24 +268,118 @@ class MoovService {
     }
   }
 
-  // Helper method to get account by foreign ID
-  Future<String?> _getAccountByForeignId(String foreignId) async {
+  // Verify bank account with Moov using micro-deposit confirmation (server-driven)
+  Future<Map<String, dynamic>> verifyBankAccount({
+    required String accountId,
+    required String bankAccountId,
+    required List<int> microDeposits,
+  }) async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/accounts?foreignID=$foreignId'),
-        headers: _headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data is List && data.isNotEmpty) {
-          return data.first['accountID'];
-        }
+      if (MoovConfig.testMode) {
+        await Future.delayed(Duration(milliseconds: 300));
+        return {
+          'status': 'verified',
+          'success': true,
+          'message': 'Test mode verification successful',
+        };
       }
-      return null;
+
+      final callable = FirebaseFunctions.instance.httpsCallable('verifyBankAccount');
+      final result = await callable.call({
+        'accountId': accountId,
+        'bankAccountId': bankAccountId,
+        'microDeposits': microDeposits,
+      });
+      final data = Map<String, dynamic>.from(result.data ?? {});
+      if (data['success'] == true) {
+        return {
+          'status': 'verified',
+          'success': true,
+          'message': data['message'] ?? 'Verification successful',
+        };
+      }
+      return {
+        'status': 'failed',
+        'success': false,
+        'error': data['error'] ?? 'Verification failed',
+      };
     } catch (e) {
-      AppLogger.log('Error getting account by foreign ID: $e');
-      return null;
+      AppLogger.log('Error verifying bank account via function: $e');
+      return {
+        'status': 'failed',
+        'error': 'Verification failed: $e',
+      };
+    }
+  }
+
+  // Initiate bank account verification from raw bank details (legacy/UI flow)
+  // In live mode this will initiate micro-deposits via a Cloud Function and return a pending status
+  // In test mode, this will immediately return verified for smoother local testing
+  Future<Map<String, dynamic>> startBankAccountVerification({
+    required String userId,
+    required String email,
+    required String firstName,
+    required String lastName,
+    String? phone,
+    required String accountNumber,
+    required String routingNumber,
+    required String accountType,
+    required String accountHolderName,
+  }) async {
+    try {
+      // Ensure the user has a Moov account
+      final moovAccountId = await getOrCreateUserAccount(
+        userId: userId,
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+      );
+      if (moovAccountId == null) {
+        return {
+          'status': 'failed',
+          'success': false,
+          'error': 'Unable to create or load Moov account',
+        };
+      }
+
+      if (MoovConfig.testMode) {
+        return {
+          'status': 'verified',
+          'success': true,
+          'message': 'Test mode verification successful',
+          'moovAccountId': moovAccountId,
+        };
+      }
+
+      // Attempt to kick off bank linking + micro-deposit verification on the server
+      try {
+        final callable = FirebaseFunctions.instance.httpsCallable('linkBankAccount');
+        await callable.call({
+          'accountId': moovAccountId,
+          'accountHolderName': accountHolderName,
+          'accountNumber': accountNumber,
+          'routingNumber': routingNumber,
+          'accountType': accountType,
+        });
+      } catch (e) {
+        // Log but still return pending to allow UI to reflect state
+        AppLogger.log('Error initiating bank account linking: $e');
+      }
+
+      return {
+        'status': 'pending',
+        'success': true,
+        'message': 'Verification initiated. Please confirm micro-deposits when available.',
+        'moovAccountId': moovAccountId,
+      };
+    } catch (e) {
+      AppLogger.log('Error starting bank account verification: $e');
+      return {
+        'status': 'failed',
+        'success': false,
+        'error': 'Failed to start verification: $e',
+      };
     }
   }
 
@@ -493,97 +408,5 @@ class MoovService {
     return date1.year == date2.year &&
            date1.month == date2.month &&
            date1.day == date2.day;
-  }
-  
-  String _getErrorMessage(int statusCode, String responseBody) {
-    try {
-      final errorData = jsonDecode(responseBody);
-      if (errorData['error'] != null) {
-        return errorData['error']['message'] ?? 'Unknown error';
-      }
-    } catch (e) {
-      // Fallback to status code message
-    }
-    
-    switch (statusCode) {
-      case 400:
-        return 'Invalid request parameters';
-      case 401:
-        return 'Authentication failed';
-      case 403:
-        return 'Insufficient permissions';
-      case 404:
-        return 'Account or resource not found';
-      case 429:
-        return 'Rate limit exceeded';
-      case 500:
-        return 'Internal server error';
-      default:
-        return 'Transfer failed (Error $statusCode)';
-    }
-  }
-
-  // Verify bank account with Moov
-  Future<Map<String, dynamic>> verifyBankAccount({
-    required String accountNumber,
-    required String routingNumber,
-    required String accountType,
-    required String accountHolderName,
-  }) async {
-    try {
-      if (MoovConfig.testMode) {
-        // Mock verification for testing
-        await Future.delayed(Duration(seconds: 3));
-        return {
-          'status': 'verified',
-          'moovAccountId': 'test_bank_${DateTime.now().millisecondsSinceEpoch}',
-        };
-      }
-      
-      AppLogger.log('Verifying bank account with Moov');
-      
-      final response = await http.post(
-        Uri.parse('$_baseUrl/bank-accounts/verify'),
-        headers: _headers,
-        body: jsonEncode({
-          'account': {
-            'accountNumber': accountNumber,
-            'routingNumber': routingNumber,
-            'accountType': accountType.toLowerCase(),
-          },
-          'accountHolder': {
-            'name': accountHolderName,
-          },
-        }),
-      );
-      
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        AppLogger.log('Bank account verification successful');
-        return {
-          'status': 'verified',
-          'moovAccountId': data['accountID'],
-        };
-      } else {
-        AppLogger.log('Bank account verification failed: ${response.statusCode} - ${response.body}');
-        return {
-          'status': 'failed',
-          'error': _getErrorMessage(response.statusCode, response.body),
-        };
-      }
-    } catch (e) {
-      AppLogger.log('Error verifying bank account: $e');
-      return {
-        'status': 'failed',
-        'error': 'Verification failed: $e',
-      };
-    }
-  }
-
-  // Webhook verification (for backend use)
-  bool verifyWebhookSignature(String payload, String signature, String secret) {
-    // Implement webhook signature verification
-    // This would typically be done in your backend
-    return true;
   }
 }

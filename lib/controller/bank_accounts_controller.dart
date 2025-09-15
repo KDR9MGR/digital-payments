@@ -563,8 +563,35 @@ class BankAccountsController extends GetxController {
       
       final account = _bankAccounts[accountIndex];
       
-      // Call Moov service to verify account
-      final verificationResult = await _moovService.verifyBankAccount(
+      // Gather current user identity details required for Moov account creation
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) return;
+      final String userId = firebaseUser.uid;
+      final String email = firebaseUser.email ?? '';
+      
+      // Try to fetch first/last name from Firestore, fallback to email local part
+      String firstName = 'User';
+      String lastName = '';
+      try {
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        if (userDoc.exists && userDoc.data() != null) {
+          final data = userDoc.data()!;
+          firstName = (data['first_name'] ?? firstName).toString();
+          lastName = (data['last_name'] ?? lastName).toString();
+        }
+      } catch (_) {}
+      
+      if ((firstName).isEmpty) {
+        final localPart = email.split('@').first;
+        firstName = localPart.isNotEmpty ? localPart : 'User';
+      }
+      
+      // Call Moov service to initiate verification
+      final verificationResult = await _moovService.startBankAccountVerification(
+        userId: userId,
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
         accountNumber: account.accountNumber,
         routingNumber: account.routingNumber,
         accountType: account.accountType,
@@ -587,7 +614,7 @@ class BankAccountsController extends GetxController {
       
       await _saveBankAccounts();
       
-      AppLogger.log('Bank account verification completed for account: $accountId');
+      AppLogger.log('Bank account verification initiated for account: $accountId');
     } catch (e) {
       AppLogger.log('Error verifying bank account with Moov: $e');
       

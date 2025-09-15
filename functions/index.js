@@ -21,6 +21,9 @@ const moovHeaders = {
   'Accept': 'application/json',
 };
 
+// Wire in modular function exports (moov API callable functions)
+Object.assign(exports, require('./moov_api'));
+
 // Environment configuration for webhook validation
 const GOOGLE_PLAY_WEBHOOK_SECRET = functions.config().google_play?.webhook_secret || 'your_google_play_webhook_secret';
 const APPLE_WEBHOOK_SECRET = functions.config().apple?.webhook_secret || 'your_apple_webhook_secret';
