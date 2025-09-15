@@ -11,15 +11,7 @@ const path = require('path');
 admin.initializeApp();
 const db = admin.firestore();
 
-// Moov configuration
-const MOOV_API_KEY = functions.config().moov ? functions.config().moov.api_key : 'stGOlQhih6BdxYhV';
-const MOOV_BASE_URL = 'https://api.moov.io';
-
-const moovHeaders = {
-  'Authorization': `Bearer ${MOOV_API_KEY}`,
-  'Content-Type': 'application/json',
-  'Accept': 'application/json',
-};
+// Moov API functions are imported from moov_api.js which handles OAuth2 authentication
 
 // Wire in modular function exports (moov API callable functions)
 Object.assign(exports, require('./moov_api'));

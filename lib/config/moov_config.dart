@@ -19,8 +19,8 @@ class MoovConfig {
   static const String sandboxUrl = 'https://api.sandbox.moov.io';
   
   // Environment configuration
-  static const bool isProduction = bool.fromEnvironment('MOOV_PRODUCTION', defaultValue: true);
-  static const bool testMode = bool.fromEnvironment('MOOV_TEST_MODE', defaultValue: false); // Set to false to enable real transactions
+  static const bool isProduction = bool.fromEnvironment('MOOV_PRODUCTION', defaultValue: false);
+  static const bool testMode = bool.fromEnvironment('MOOV_TEST_MODE', defaultValue: true); // Set to true for testing without real API calls
   
   // Get the appropriate base URL based on environment
   static String get effectiveBaseUrl => isProduction ? baseUrl : sandboxUrl;

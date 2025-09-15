@@ -1,6 +1,7 @@
 import '../utils/app_logger.dart';
 import '../config/moov_config.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MoovService {
   static final MoovService _instance = MoovService._internal();
@@ -179,12 +180,47 @@ class MoovService {
       }
       AppLogger.log('Processing P2P transfer from $senderAccountId to $recipientAccountId');
 
+      // Try to get wallet IDs for more efficient transfers
+      String? senderWalletId;
+      String? recipientWalletId;
+      
+      try {
+        // Get sender wallet ID from Firestore
+        final senderQuery = await FirebaseFirestore.instance
+            .collection('users')
+            .where('moovAccountId', isEqualTo: senderAccountId)
+            .limit(1)
+            .get();
+        
+        if (senderQuery.docs.isNotEmpty) {
+          senderWalletId = senderQuery.docs.first.data()['moovWalletId'];
+          AppLogger.log('Found sender wallet ID: $senderWalletId');
+        }
+        
+        // Get recipient wallet ID from Firestore
+        final recipientQuery = await FirebaseFirestore.instance
+            .collection('users')
+            .where('moovAccountId', isEqualTo: recipientAccountId)
+            .limit(1)
+            .get();
+        
+        if (recipientQuery.docs.isNotEmpty) {
+          recipientWalletId = recipientQuery.docs.first.data()['moovWalletId'];
+          AppLogger.log('Found recipient wallet ID: $recipientWalletId');
+        }
+      } catch (e) {
+        AppLogger.log('Warning: Could not fetch wallet IDs, using account IDs as fallback: $e');
+      }
+
       int attempts = 0;
       while (attempts < MoovConfig.maxRetries) {
         attempts++;
         try {
           final callable = FirebaseFunctions.instance.httpsCallable('createP2PTransfer');
           final result = await callable.call({
+            // Pass wallet IDs if available, otherwise fallback to account IDs
+            if (senderWalletId != null) 'senderWalletId': senderWalletId,
+            if (recipientWalletId != null) 'recipientWalletId': recipientWalletId,
             'senderAccountId': senderAccountId,
             'recipientAccountId': recipientAccountId,
             'amount': amount,

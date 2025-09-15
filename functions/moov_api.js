@@ -1,66 +1,45 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const axios = require('axios');
-const crypto = require('crypto');
+
+// Initialize Firebase Admin if not already initialized
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
+// Moov configuration
+const MOOV_CONFIG = {
+  baseURL: functions.config().moov?.base_url || 'https://api.moov.io',
+  publicKey: functions.config().moov?.public_key,
+  privateKey: functions.config().moov?.private_key,
+  platformAccountId: functions.config().moov?.platform_account_id
+};
+
+// Validate required configuration
+function validateMoovConfig() {
+  if (!MOOV_CONFIG.publicKey || !MOOV_CONFIG.privateKey) {
+    throw new Error('Moov API keys are not configured. Please set moov.public_key and moov.private_key in Firebase config.');
+  }
+}
+
+// Create Basic Auth header for Moov API
+function createBasicAuthHeader() {
+  validateMoovConfig();
+  const credentials = Buffer.from(`${MOOV_CONFIG.publicKey}:${MOOV_CONFIG.privateKey}`).toString('base64');
+  return `Basic ${credentials}`;
+}
+
+// Get headers for Moov API requests
+function moovHeaders() {
+  return {
+    'Authorization': createBasicAuthHeader(),
+    'Content-Type': 'application/json',
+    'X-Platform-Account-ID': MOOV_CONFIG.platformAccountId || ''
+  };
+}
 
 // Shared Firestore
 const db = admin.firestore();
-
-// Moov config (must be set via: firebase functions:config:set ...)
-const MOOV_BASE_URL = functions.config().moov?.base_url || 'https://api.moov.io';
-const MOOV_PUBLIC_KEY = functions.config().moov?.public_key;
-const MOOV_PRIVATE_KEY = functions.config().moov?.private_key;
-const MOOV_CLIENT_ID = functions.config().moov?.client_id;
-const MOOV_CLIENT_SECRET = functions.config().moov?.client_secret;
-const MOOV_PLATFORM_ACCOUNT_ID = functions.config().moov?.platform_account_id; // your platform/facilitator account ID
-
-if (!MOOV_PUBLIC_KEY || !MOOV_PRIVATE_KEY || !MOOV_CLIENT_ID || !MOOV_CLIENT_SECRET) {
-  console.warn('[moov_api] Missing Moov credentials in functions config. Set moov.public_key, moov.private_key, moov.client_id, moov.client_secret');
-}
-
-// Simple in-memory token cache
-let cachedToken = null;
-let cachedTokenExpiresAt = 0;
-
-async function getMoovAccessToken(scopes) {
-  const now = Math.floor(Date.now() / 1000);
-  if (cachedToken && now < cachedTokenExpiresAt - 60) {
-    return cachedToken;
-  }
-
-  const basic = Buffer.from(`${MOOV_PUBLIC_KEY}:${MOOV_PRIVATE_KEY}`).toString('base64');
-  const url = `${MOOV_BASE_URL}/oauth2/token`;
-
-  const body = {
-    grant_type: 'client_credentials',
-    client_id: MOOV_CLIENT_ID,
-    client_secret: MOOV_CLIENT_SECRET,
-    scope: Array.isArray(scopes) ? scopes.join(' ') : (scopes || ''),
-  };
-
-  const resp = await axios.post(url, body, {
-    headers: {
-      'Authorization': `Basic ${basic}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    timeout: 10000,
-  });
-
-  const { access_token, expires_in } = resp.data;
-  cachedToken = access_token;
-  cachedTokenExpiresAt = now + (expires_in || 3600);
-  return cachedToken;
-}
-
-function moovHeaders(token, extra = {}) {
-  return {
-    'Authorization': `Bearer ${token}`,
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    ...extra,
-  };
-}
 
 // Utility: ensure a user's Moov account is stored on their user doc
 async function saveUserMoovAccountId(uid, accountID, status) {
@@ -84,9 +63,8 @@ exports.createMoovAccount = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    // Create account
-    const token = await getMoovAccessToken(['/accounts.write']);
-    const createResp = await axios.post(`${MOOV_BASE_URL}/accounts`, {
+    // Create account using API key authentication
+    const createResp = await axios.post(`${MOOV_CONFIG.baseURL}/accounts`, {
       accountType: 'individual',
       profile: {
         individual: {
@@ -96,48 +74,63 @@ exports.createMoovAccount = functions.https.onCall(async (data, context) => {
         },
       },
       foreignId: uid,
-    }, { headers: moovHeaders(token), timeout: 15000 });
+    }, { headers: moovHeaders(), timeout: 15000 });
 
     const account = createResp.data;
 
     // Request capabilities (transfers, send-funds, wallet)
     try {
-      const capToken = await getMoovAccessToken([`/accounts/${account.accountID}/capabilities.write`]);
-      await axios.post(`${MOOV_BASE_URL}/accounts/${account.accountID}/capabilities`, {
+      await axios.post(`${MOOV_CONFIG.baseURL}/accounts/${account.accountID}/capabilities`, {
         capabilities: ['transfers', 'send-funds', 'wallet'],
-      }, { headers: moovHeaders(capToken), timeout: 15000 });
+      }, { headers: moovHeaders(), timeout: 15000 });
     } catch (e) {
       console.warn('[moov_api] capabilities request failed:', e?.response?.data || e.message);
     }
 
-    await saveUserMoovAccountId(uid, account.accountID, account.status);
+    // Create wallet for the account
+    let walletId = null;
+    try {
+      const walletResp = await axios.post(`${MOOV_CONFIG.baseURL}/accounts/${account.accountID}/wallets`, {
+        walletID: `wallet_${account.accountID}`,
+      }, { headers: moovHeaders(), timeout: 15000 });
+      walletId = walletResp.data.walletID;
+    } catch (e) {
+      console.warn('[moov_api] wallet creation failed:', e?.response?.data || e.message);
+    }
 
-    return { success: true, accountId: account.accountID, data: account };
-  } catch (err) {
-    console.error('[moov_api] createMoovAccount failed:', err?.response?.data || err.message);
+    // Save to Firestore
+    await saveUserMoovAccountId(uid, account.accountID, account.verification?.status);
+
+    return {
+      success: true,
+      accountID: account.accountID,
+      walletID: walletId,
+      status: account.verification?.status || 'unverified',
+    };
+  } catch (error) {
+    console.error('[moov_api] createMoovAccount error:', error?.response?.data || error.message);
     throw new functions.https.HttpsError('internal', 'Failed to create Moov account');
   }
 });
 
-// Get or create Moov account for the authenticated user
+// Get or create Moov account for user
 exports.getOrCreateMoovAccount = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
   const uid = context.auth.uid;
 
-  // Check Firestore first
+  // Check if user already has a Moov account
   const userDoc = await db.collection('users').doc(uid).get();
-  const existing = userDoc.exists ? userDoc.data() : null;
-  if (existing?.moovAccountId) {
-    return { success: true, accountId: existing.moovAccountId };
+  if (userDoc.exists && userDoc.data()?.moovAccountId) {
+    return { success: true, accountID: userDoc.data().moovAccountId, exists: true };
   }
 
-  // If not present, require the client to pass email/name to create
-  throw new functions.https.HttpsError('failed-precondition', 'No Moov account. Call createMoovAccount with user details.');
+  // Create new account if none exists
+  return exports.createMoovAccount(data, context);
 });
 
-// Get Moov account by ID (or current user's account)
+// Get Moov account details
 exports.getMoovAccount = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -155,9 +148,8 @@ exports.getMoovAccount = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    const token = await getMoovAccessToken([`/accounts/${accId}/profile.read`]);
-    const resp = await axios.get(`${MOOV_BASE_URL}/accounts/${accId}`, {
-      headers: moovHeaders(token),
+    const resp = await axios.get(`${MOOV_CONFIG.baseURL}/accounts/${accId}`, {
+      headers: moovHeaders(),
       timeout: 10000,
     });
     return { success: true, data: resp.data };
@@ -185,9 +177,8 @@ exports.listPaymentMethods = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    const token = await getMoovAccessToken([`/accounts/${accId}/payment-methods.read`]);
-    const resp = await axios.get(`${MOOV_BASE_URL}/accounts/${accId}/payment-methods`, {
-      headers: moovHeaders(token),
+    const resp = await axios.get(`${MOOV_CONFIG.baseURL}/accounts/${accId}/payment-methods`, {
+      headers: moovHeaders(),
       timeout: 10000,
     });
     return { success: true, data: resp.data };
@@ -209,9 +200,8 @@ exports.deletePaymentMethod = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    const token = await getMoovAccessToken([`/accounts/${accountId}/cards.write`, `/accounts/${accountId}/bank-accounts.write`]);
-    await axios.delete(`${MOOV_BASE_URL}/accounts/${accountId}/payment-methods/${paymentMethodId}`, {
-      headers: moovHeaders(token),
+    await axios.delete(`${MOOV_CONFIG.baseURL}/accounts/${accountId}/payment-methods/${paymentMethodId}`, {
+      headers: moovHeaders(),
       timeout: 10000,
     });
     return { success: true };
@@ -221,39 +211,64 @@ exports.deletePaymentMethod = functions.https.onCall(async (data, context) => {
   }
 });
 
-// Create P2P transfer between two Moov accounts
+// Create P2P transfer between two Moov wallets
 exports.createP2PTransfer = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
-  if (!MOOV_PLATFORM_ACCOUNT_ID) {
+  if (!MOOV_CONFIG.platformAccountId) {
     throw new functions.https.HttpsError(
       'failed-precondition',
       'Moov platform account id is not configured. Set functions config moov.platform_account_id.'
     );
   }
 
-  const { senderAccountId, recipientAccountId, amount, currency = 'USD', description } = data || {};
-  if (!senderAccountId || !recipientAccountId || !amount) {
-    throw new functions.https.HttpsError('invalid-argument', 'senderAccountId, recipientAccountId, and amount are required');
+  const { senderWalletId, recipientWalletId, senderAccountId, recipientAccountId, amount, currency = 'USD', description } = data || {};
+  
+  // Support both wallet IDs (preferred) and account IDs (fallback)
+  let sourceWalletId = senderWalletId;
+  let destWalletId = recipientWalletId;
+  
+  // If wallet IDs not provided, try to get them from account IDs
+  if (!sourceWalletId && senderAccountId) {
+    try {
+      const senderDoc = await db.collection('users').where('moovAccountId', '==', senderAccountId).limit(1).get();
+      if (!senderDoc.empty) {
+        sourceWalletId = senderDoc.docs[0].data().moovWalletId;
+      }
+    } catch (e) {
+      console.warn('[moov_api] Failed to get sender wallet ID:', e.message);
+    }
+  }
+  
+  if (!destWalletId && recipientAccountId) {
+    try {
+      const recipientDoc = await db.collection('users').where('moovAccountId', '==', recipientAccountId).limit(1).get();
+      if (!recipientDoc.empty) {
+        destWalletId = recipientDoc.docs[0].data().moovWalletId;
+      }
+    } catch (e) {
+      console.warn('[moov_api] Failed to get recipient wallet ID:', e.message);
+    }
+  }
+
+  if (!sourceWalletId || !destWalletId || !amount) {
+    throw new functions.https.HttpsError('invalid-argument', 'senderWalletId, recipientWalletId, and amount are required. Ensure users have wallets created.');
   }
 
   try {
-    // Per docs, transfers scopes are restricted to the platform account ID
-    // so request a token scoped for transfers from the platform account
-    const token = await getMoovAccessToken([`/accounts/${MOOV_PLATFORM_ACCOUNT_ID}/transfers.write`]);
+    // Generate unique idempotency key for transfer
+    const idempotencyKey = `transfer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    const idempotencyKey = crypto.randomUUID();
-
-    const resp = await axios.post(`${MOOV_BASE_URL}/transfers`, {
-      source: { account: { accountID: senderAccountId } },
-      destination: { account: { accountID: recipientAccountId } },
+    const resp = await axios.post(`${MOOV_CONFIG.baseURL}/transfers`, {
+      source: { wallet: { walletID: sourceWalletId } },
+      destination: { wallet: { walletID: destWalletId } },
       amount: { currency, value: Math.round(Number(amount) * 100) },
       description: description || 'P2P Transfer',
       metadata: { transferType: 'p2p', userId: context.auth.uid, ts: new Date().toISOString() },
     }, {
-      headers: moovHeaders(token, { 'Idempotency-Key': idempotencyKey }),
+      headers: { ...moovHeaders(), 'Idempotency-Key': idempotencyKey },
       timeout: 15000,
     });
 
@@ -294,10 +309,8 @@ exports.verifyBankAccount = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    const token = await getMoovAccessToken(['/bank-accounts.write']);
-
     const resp = await axios.post(
-      `${MOOV_BASE_URL}/bank-accounts/verify`,
+      `${MOOV_CONFIG.baseURL}/bank-accounts/verify`,
       {
         account: {
           accountNumber,
@@ -308,7 +321,7 @@ exports.verifyBankAccount = functions.https.onCall(async (data, context) => {
           name: accountHolderName,
         },
       },
-      { headers: moovHeaders(token), timeout: 15000 }
+      { headers: moovHeaders(), timeout: 15000 }
     );
 
     const body = resp.data || {};

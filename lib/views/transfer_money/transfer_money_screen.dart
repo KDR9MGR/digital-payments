@@ -15,6 +15,9 @@ import '../../widgets/inputs/amount_input_widget.dart';
 import '../../widgets/inputs/dropdown_widget.dart';
 import '../../widgets/inputs/validated_dropdown_widget.dart';
 import '../../widgets/inputs/secondary_text_input_widget.dart';
+import '../../widgets/user_search_widget.dart';
+import 'transaction_confirmation_screen.dart';
+import 'transaction_history_screen.dart';
 import '../../widgets/primary_appbar.dart';
 import '../../widgets/wallet_info_widget.dart';
 import '../../widgets/go_premium_widget.dart';
@@ -82,12 +85,25 @@ class _TransferMoneyScreenState extends State<TransferMoneyScreen>
             border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
           ),
           child: IconButton(
-            onPressed: () {
-              Get.back();
-            },
+            onPressed: () => Get.back(),
             icon: Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           ),
         ),
+        action: [
+          Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            child: IconButton(
+              onPressed: () => Get.to(() => const TransactionHistoryScreen()),
+              icon: Icon(Ionicons.receipt_outline, color: Colors.white, size: 20),
+              tooltip: 'Transaction History',
+            ),
+          ),
+        ],
       ),
       body: SubscriptionGuard(
         customMessage: 'Transfer money feature requires a premium subscription. Upgrade now to send money securely.',
@@ -234,53 +250,18 @@ class _TransferMoneyScreenState extends State<TransferMoneyScreen>
               ),
               const SizedBox(height: 24),
 
-              // Recipient Email
+              // Recipient Search
               _buildModernLabel('Receiver'),
               const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: SecondaryTextInputWidget(
-                  controller: controller.receiverUsernameOrEmailController,
-                  validator:
-                      MultiValidator([
-                        RequiredValidator(errorText: 'Enter receiver email'),
-                        EmailValidator(
-                          errorText: 'Enter a valid email address',
-                        ),
-                      ]).call,
-                  hintText: 'Enter receiver email address',
-                  color: Colors.transparent,
-                  suffixIcon: Ionicons.qr_code_outline,
-                  keyboardType: TextInputType.emailAddress,
-                  onTap: () {
-                    controller.navigateToTransferMoneyScanQrCodeScreen();
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Ionicons.checkmark_circle,
-                    color: CustomColor.successColor,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    Strings.validUserForTransaction.tr,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: CustomColor.successColor,
-                    ),
-                  ),
-                ],
+              UserSearchWidget(
+                controller: controller.receiverUsernameOrEmailController,
+                hintText: 'Search by email or phone number',
+                onUserSelected: (user) {
+                  controller.selectedRecipient.value = user;
+                },
+                onScanQR: () {
+                  controller.navigateToTransferMoneyScanQrCodeScreen();
+                },
               ),
               const SizedBox(height: 24),
 
@@ -501,7 +482,41 @@ class _TransferMoneyScreenState extends State<TransferMoneyScreen>
               : Strings.transferNow.tr,
           onPressed: () {
             if (!controller.isProcessingTransfer.value && formKey.currentState!.validate()) {
-              controller.processTransfer();
+              // Validate form before proceeding
+              if (controller.selectedRecipient.value == null) {
+                Get.snackbar(
+                  'Error',
+                  'Please select a recipient',
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+                return;
+              }
+              
+              if (controller.amountController.text.isEmpty || 
+                  double.tryParse(controller.amountController.text) == null ||
+                  double.parse(controller.amountController.text) <= 0) {
+                Get.snackbar(
+                  'Error',
+                  'Please enter a valid amount',
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+                return;
+              }
+              
+              if (controller.selectedPaymentMethod.value.isEmpty) {
+                Get.snackbar(
+                  'Error',
+                  'Please select a payment method',
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+                return;
+              }
+              
+              // Navigate to confirmation screen
+              Get.to(() => const TransactionConfirmationScreen());
             }
           },
           borderColorName: Colors.transparent,

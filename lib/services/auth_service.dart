@@ -7,6 +7,7 @@ import '../utils/app_logger.dart';
 import '../services/firebase_batch_service.dart';
 import '../controller/subscription_controller.dart';
 import '../services/subscription_service.dart';
+import '../services/moov_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -17,6 +18,7 @@ class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseBatchService _batchService = FirebaseBatchService();
+  final MoovService _moovService = MoovService();
 
   User? get currentUser => _auth.currentUser;
   bool get isSignedIn => _auth.currentUser != null;
@@ -299,10 +301,52 @@ class AuthService {
   /// Save user to Firestore
   Future<void> _saveUserToFirestore(UserModel user) async {
     try {
+      // Create Moov account for the user
+      String? moovAccountId;
+      String? moovWalletId;
+      try {
+        AppLogger.log('Creating Moov account for user: ${user.emailAddress}');
+        final moovResult = await _moovService.createAccount(
+          userId: user.userId,
+          email: user.emailAddress,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phone: user.mobile.isNotEmpty ? user.mobile : null,
+        );
+        
+        if (moovResult?['success'] == true) {
+          moovAccountId = moovResult?['accountId'];
+          moovWalletId = moovResult?['walletId'];
+          
+          AppLogger.log('Moov account created successfully: $moovAccountId');
+          if (moovWalletId != null) {
+            AppLogger.log('Moov wallet created: $moovWalletId');
+          }
+        } else {
+          AppLogger.log('Warning: Failed to create Moov account for user');
+        }
+      } catch (e) {
+        AppLogger.log('Error creating Moov account: $e');
+        // Continue with user creation even if Moov account fails
+        // User can create Moov account later when needed
+      }
+
+      // Add Moov account and wallet IDs to user data
+      final userData = user.toMap();
+      if (moovAccountId != null) {
+        userData['moovAccountId'] = moovAccountId;
+        userData['moovAccountStatus'] = 'created';
+      }
+      if (moovWalletId != null) {
+        userData['moovWalletId'] = moovWalletId;
+        userData['moovWalletStatus'] = 'created';
+      }
+      userData['moovAccountCreatedAt'] = FieldValue.serverTimestamp();
+
       await _batchService.addWrite(
         collection: 'users',
         documentId: user.userId,
-        data: user.toMap(),
+        data: userData,
       );
       await _batchService.flushBatch();
       AppLogger.log('User saved to Firestore: ${user.userId}');

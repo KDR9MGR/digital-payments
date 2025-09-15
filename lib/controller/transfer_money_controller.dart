@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/app_logger.dart';
 import '../data/user_model.dart';
 import '../config/moov_config.dart';
+import '../views/transfer_money/transaction_success_screen.dart';
 
 class TransferMoneyController extends GetxController {
   final dropdownWalletController = TextEditingController();
@@ -24,6 +25,9 @@ class TransferMoneyController extends GetxController {
   List<String> paymentMethods = ['Bank Account', 'Debit Card', 'Credit Card', 'Wallet Balance'];
   RxString selectedPaymentMethod = ''.obs;
   RxBool isProcessingTransfer = false.obs;
+  
+  // Selected recipient for transfer
+  Rx<Map<String, dynamic>?> selectedRecipient = Rx<Map<String, dynamic>?>(null);
   
   final MoovService _moovService = MoovService();
 
@@ -201,21 +205,43 @@ class TransferMoneyController extends GetxController {
       
       if (transferResult['success'] == true) {
         AppLogger.log('Transfer completed successfully');
-        // Show success and navigate to confirmation
-        Get.snackbar(
-          'Transfer Successful',
-          'Transfer of \$${amount.toStringAsFixed(2)} to $recipient completed successfully\nTransaction ID: ${transferResult['transferId']}',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          duration: Duration(seconds: 5),
-        );
+        
+        // Get recipient name for success screen
+        String recipientName = 'Unknown Recipient';
+        if (selectedRecipient.value != null) {
+          final firstName = selectedRecipient.value!['firstName'] ?? selectedRecipient.value!['first_name'] ?? '';
+          final lastName = selectedRecipient.value!['lastName'] ?? selectedRecipient.value!['last_name'] ?? '';
+          
+          if (firstName.isNotEmpty && lastName.isNotEmpty) {
+            recipientName = '$firstName $lastName';
+          } else if (firstName.isNotEmpty) {
+            recipientName = firstName;
+          } else if (lastName.isNotEmpty) {
+            recipientName = lastName;
+          } else {
+            final email = selectedRecipient.value!['email'] ?? selectedRecipient.value!['email_address'] ?? recipient;
+            if (email.isNotEmpty) {
+              recipientName = email.split('@').first;
+            }
+          }
+        } else {
+          recipientName = recipient.split('@').first;
+        }
+        
+        // Navigate to success screen with transaction details
+        Get.to(() => TransactionSuccessScreen(
+          transactionId: transferResult['transferId'] ?? 'N/A',
+          amount: amount,
+          recipientName: recipientName,
+          recipientEmail: recipient,
+          currency: currency,
+          timestamp: DateTime.now(),
+        ));
         
         // Clear form fields
         receiverUsernameOrEmailController.clear();
         amountController.text = '0';
-        
-        // Navigate to confirmation screen
-        navigateToConfirmTransferMoneyScreen();
+        selectedRecipient.value = null;
       } else {
         throw transferResult['error'] ?? 'Transfer failed';
       }
@@ -230,12 +256,35 @@ class TransferMoneyController extends GetxController {
         Get.back();
       }
       
-      Get.snackbar(
-        'Transfer Failed',
-        'Failed to process transfer: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: Duration(seconds: 5),
+      // Show detailed error dialog instead of snackbar
+      Get.dialog(
+        AlertDialog(
+          title: Text('Transfer Error'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('An error occurred while processing your transfer:'),
+              SizedBox(height: 8),
+              Text(
+                e.toString(),
+                style: TextStyle(fontSize: 12, color: Colors.red),
+              ),
+              SizedBox(height: 16),
+              Text('Please check:'),
+              Text('• Internet connection'),
+              Text('• Recipient email is valid'),
+              Text('• Transfer amount is valid'),
+              Text('• Try again in a few moments'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Get.back(),
+              child: Text('OK'),
+            ),
+          ],
+        ),
       );
     } finally {
       isProcessingTransfer.value = false;
