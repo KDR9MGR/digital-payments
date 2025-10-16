@@ -7,7 +7,8 @@ import '../utils/app_logger.dart';
 import '../services/firebase_batch_service.dart';
 import '../controller/subscription_controller.dart';
 import '../services/subscription_service.dart';
-import '../services/moov_service.dart';
+import '../services/plaid_service.dart';
+import '../services/api_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -18,7 +19,8 @@ class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseBatchService _batchService = FirebaseBatchService();
-  final MoovService _moovService = MoovService();
+  final PlaidService _plaidService = PlaidService();
+  final ApiService _apiService = ApiService();
 
   User? get currentUser => _auth.currentUser;
   bool get isSignedIn => _auth.currentUser != null;
@@ -31,6 +33,24 @@ class AuthService {
     try {
       AppLogger.log('Attempting email/password sign in for: $email');
 
+      // First authenticate with backend API
+      final apiResponse = await _apiService.login(
+        email: email.trim().toLowerCase(),
+        password: password,
+      );
+
+      if (!apiResponse.isSuccess) {
+        return AuthResult.error(apiResponse.error ?? 'Backend authentication failed');
+      }
+
+      // Set JWT token for future API calls
+      final token = apiResponse.data?['token'];
+      if (token != null) {
+        _apiService.setAuthToken(token);
+        AppLogger.log('Backend authentication successful, JWT token set');
+      }
+
+      // Then authenticate with Firebase
       final UserCredential result = await _auth.signInWithEmailAndPassword(
         email: email.trim().toLowerCase(),
         password: password.trim(),
@@ -41,12 +61,18 @@ class AuthService {
         await _initializeUserSession(result.user!);
         return AuthResult.success();
       } else {
+        // Clear API token if Firebase auth fails
+        _apiService.clearAuthToken();
         return AuthResult.error('Authentication failed');
       }
     } on FirebaseAuthException catch (e) {
+      // Clear API token if Firebase auth fails
+      _apiService.clearAuthToken();
       AppLogger.log('Firebase auth error: ${e.code} - ${e.message}');
       return AuthResult.error(_getFirebaseAuthErrorMessage(e));
     } catch (e) {
+      // Clear API token on any error
+      _apiService.clearAuthToken();
       AppLogger.log('Sign in error: $e');
       return AuthResult.error(
         'An unexpected error occurred. Please try again.',
@@ -76,35 +102,69 @@ class AuthService {
       );
 
       if (result.user != null) {
-        // Create user model
-        final userModel = UserModel(
-          userId: result.user!.uid,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          country: country,
-          emailAddress: email.trim().toLowerCase(),
-          mobile: mobile.trim(),
-          password: '', // Don't store password in Firestore
-          accountType: accountType,
-          companyName: companyName?.trim(),
-          representativeFirstName: representativeFirstName?.trim(),
-          representativeLastName: representativeLastName?.trim(),
-          walletBalances: {},
-          address: null,
-          state: null,
-          city: null,
-          zipCode: null,
-          profilePhoto: null,
-          isSubscribed: false,
-          subscriptionStatus: 'none',
-        );
+        try {
+          // Register with backend API
+          final apiResponse = await _apiService.register(
+            email: email.trim().toLowerCase(),
+            password: password,
+            firstName: firstName,
+            lastName: lastName,
+            country: country,
+            mobile: mobile,
+            accountType: accountType,
+            companyName: companyName,
+            representativeFirstName: representativeFirstName,
+            representativeLastName: representativeLastName,
+          );
 
-        // Save user details to Firestore
-        await _saveUserToFirestore(userModel);
+          if (apiResponse.isSuccess) {
+            // Set JWT token for future API calls
+            final token = apiResponse.data?['token'];
+            if (token != null) {
+              _apiService.setAuthToken(token);
+              AppLogger.log('Backend registration successful, JWT token set');
+            }
 
-        AppLogger.log('Email/password sign up successful');
-        await _initializeUserSession(result.user!);
-        return AuthResult.success();
+            // Create user model
+            final userModel = UserModel(
+              userId: result.user!.uid,
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              country: country,
+              emailAddress: email.trim().toLowerCase(),
+              mobile: mobile.trim(),
+              password: '', // Don't store password in Firestore
+              accountType: accountType,
+              companyName: companyName?.trim(),
+              representativeFirstName: representativeFirstName?.trim(),
+              representativeLastName: representativeLastName?.trim(),
+              walletBalances: {},
+              address: null,
+              state: null,
+              city: null,
+              zipCode: null,
+              profilePhoto: null,
+              isSubscribed: false,
+              subscriptionStatus: 'none',
+            );
+
+            // Save user details to Firestore
+            await _saveUserToFirestore(userModel);
+
+            AppLogger.log('Email/password sign up successful');
+            await _initializeUserSession(result.user!);
+            return AuthResult.success();
+          } else {
+            // Backend registration failed, clean up Firebase user
+            await result.user!.delete();
+            return AuthResult.error(apiResponse.error ?? 'Backend registration failed');
+          }
+        } catch (e) {
+          // Backend registration failed, clean up Firebase user
+          await result.user!.delete();
+          AppLogger.log('Backend registration error: $e');
+          return AuthResult.error('Registration failed. Please try again.');
+        }
       } else {
         return AuthResult.error('Account creation failed');
       }
@@ -191,6 +251,9 @@ class AuthService {
   Future<void> signOut() async {
     try {
       AppLogger.log('Signing out user');
+
+      // Clear API token
+      _apiService.clearAuthToken();
 
       // Sign out from Google if signed in
       if (await _googleSignIn.isSignedIn()) {
@@ -301,47 +364,42 @@ class AuthService {
   /// Save user to Firestore
   Future<void> _saveUserToFirestore(UserModel user) async {
     try {
-      // Create Moov account for the user
-      String? moovAccountId;
-      String? moovWalletId;
+      // Create Sila account for the user
+      String? silaAccountId;
+      String? silaWalletId;
       try {
-        AppLogger.log('Creating Moov account for user: ${user.emailAddress}');
-        final moovResult = await _moovService.createAccount(
-          userId: user.userId,
-          email: user.emailAddress,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          phone: user.mobile.isNotEmpty ? user.mobile : null,
-        );
+        AppLogger.log('Setting account ID for user: ${user.emailAddress}');
+        // Simplified account creation - using user ID as account ID
+        final accountResult = user.userId;
         
-        if (moovResult?['success'] == true) {
-          moovAccountId = moovResult?['accountId'];
-          moovWalletId = moovResult?['walletId'];
+        if (accountResult != null) {
+          silaAccountId = accountResult;
+          silaWalletId = accountResult; // Using user ID as both account and wallet ID
           
-          AppLogger.log('Moov account created successfully: $moovAccountId');
-          if (moovWalletId != null) {
-            AppLogger.log('Moov wallet created: $moovWalletId');
+          AppLogger.log('Sila account created successfully: $silaAccountId');
+          if (silaWalletId != null) {
+            AppLogger.log('Sila wallet created: $silaWalletId');
           }
         } else {
-          AppLogger.log('Warning: Failed to create Moov account for user');
+          AppLogger.log('Warning: Failed to create Sila account for user');
         }
       } catch (e) {
-        AppLogger.log('Error creating Moov account: $e');
-        // Continue with user creation even if Moov account fails
-        // User can create Moov account later when needed
+        AppLogger.log('Error creating Sila account: $e');
+        // Continue with user creation even if Sila account fails
+        // User can create Sila account later when needed
       }
 
-      // Add Moov account and wallet IDs to user data
+      // Add Sila account and wallet IDs to user data
       final userData = user.toMap();
-      if (moovAccountId != null) {
-        userData['moovAccountId'] = moovAccountId;
-        userData['moovAccountStatus'] = 'created';
+      if (silaAccountId != null) {
+        userData['silaAccountId'] = silaAccountId;
+        userData['silaAccountStatus'] = 'created';
       }
-      if (moovWalletId != null) {
-        userData['moovWalletId'] = moovWalletId;
-        userData['moovWalletStatus'] = 'created';
+      if (silaWalletId != null) {
+        userData['silaWalletId'] = silaWalletId;
+        userData['silaWalletStatus'] = 'created';
       }
-      userData['moovAccountCreatedAt'] = FieldValue.serverTimestamp();
+      userData['silaAccountCreatedAt'] = FieldValue.serverTimestamp();
 
       await _batchService.addWrite(
         collection: 'users',

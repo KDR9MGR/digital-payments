@@ -395,7 +395,7 @@ class PaymentValidationService {
     double amount,
   ) async {
     try {
-      // Validate against the plan configuration in MoovConfig
+      // Validate against the plan configuration
       // The planId passed is the key ('super_payments'), but we need to check the actual plan data
       if (planId == 'super_payments' && amount == 1.99) {
         return {'valid': true};

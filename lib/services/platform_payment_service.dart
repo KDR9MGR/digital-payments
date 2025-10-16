@@ -3,7 +3,7 @@ import '../utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import '../config/moov_config.dart';
+import '../config/payment_config.dart';
 
 class PlatformPaymentService {
   static const MethodChannel _channel = MethodChannel('platform_payment');
@@ -35,8 +35,8 @@ class PlatformPaymentService {
     try {
       AppLogger.log('Initializing Google Pay...');
       await _channel.invokeMethod('initializeGooglePay', {
-        'environment': MoovConfig.googlePayConfig['environment'],
-        'merchantInfo': MoovConfig.googlePayConfig['merchantInfo'],
+        'environment': PaymentConfig.googlePayConfig['environment'],
+        'merchantInfo': PaymentConfig.googlePayConfig['merchantInfo'],
       });
       AppLogger.log('Google Pay initialized successfully');
     } catch (e) {
@@ -50,9 +50,9 @@ class PlatformPaymentService {
     try {
       AppLogger.log('Initializing Apple Pay...');
       await _channel.invokeMethod('initializeApplePay', {
-        'merchantIdentifier': MoovConfig.applePayConfig['merchantIdentifier'],
-        'countryCode': MoovConfig.applePayConfig['countryCode'],
-        'currencyCode': MoovConfig.applePayConfig['currencyCode'],
+        'merchantIdentifier': PaymentConfig.applePayConfig['merchantIdentifier'],
+        'countryCode': PaymentConfig.applePayConfig['countryCode'],
+        'currencyCode': PaymentConfig.applePayConfig['currencyCode'],
       });
       AppLogger.log('Apple Pay initialized successfully');
     } catch (e) {
@@ -120,17 +120,17 @@ class PlatformPaymentService {
         'subscriptionId': subscriptionId,
         'description': 'Super Payments Monthly Subscription',
         'paymentRequest': {
-          'apiVersion': MoovConfig.googlePayConfig['apiVersion'],
-          'apiVersionMinor': MoovConfig.googlePayConfig['apiVersionMinor'],
+          'apiVersion': PaymentConfig.googlePayConfig['apiVersion'],
+          'apiVersionMinor': PaymentConfig.googlePayConfig['apiVersionMinor'],
           'allowedPaymentMethods':
-              MoovConfig.googlePayConfig['allowedPaymentMethods'],
+              PaymentConfig.googlePayConfig['allowedPaymentMethods'],
           'transactionInfo': {
             'totalPrice': amount.toString(),
             'totalPriceStatus': 'FINAL',
             'currencyCode': currency,
             'transactionId': subscriptionId,
           },
-          'merchantInfo': MoovConfig.googlePayConfig['merchantInfo'],
+          'merchantInfo': PaymentConfig.googlePayConfig['merchantInfo'],
         },
       });
 
@@ -158,13 +158,13 @@ class PlatformPaymentService {
         'subscriptionId': subscriptionId,
         'description': 'Super Payments Monthly Subscription',
         'paymentRequest': {
-          'merchantIdentifier': MoovConfig.applePayConfig['merchantIdentifier'],
-          'displayName': MoovConfig.applePayConfig['displayName'],
-          'countryCode': MoovConfig.applePayConfig['countryCode'],
+          'merchantIdentifier': PaymentConfig.applePayConfig['merchantIdentifier'],
+          'displayName': PaymentConfig.applePayConfig['displayName'],
+          'countryCode': PaymentConfig.applePayConfig['countryCode'],
           'currencyCode': currency,
-          'supportedNetworks': MoovConfig.applePayConfig['supportedNetworks'],
+          'supportedNetworks': PaymentConfig.applePayConfig['supportedNetworks'],
           'merchantCapabilities':
-              MoovConfig.applePayConfig['merchantCapabilities'],
+              PaymentConfig.applePayConfig['merchantCapabilities'],
           'paymentSummaryItems': [
             {
               'label': 'Super Payments Monthly',

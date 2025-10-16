@@ -47,3 +47,7 @@ app.*.map.json
 # Service account credentials (sensitive)
 functions/*.json
 !functions/package*.json
+
+# Backend environment and build artifacts (sensitive or generated)
+backend/.env
+backend/digital-payments-backend

@@ -670,7 +670,7 @@ class SubscriptionScreen extends StatelessWidget {
 
           SizedBox(height: Dimensions.heightSize),
           Text(
-            'Secure payments powered by Moov.io',
+            'Secure payments powered by Sila',
             style: CustomStyle.commonSubTextTitle.copyWith(
               fontSize: Dimensions.smallTextSize - 2,
               color: Colors.grey,

@@ -1,6 +1,6 @@
 # Firebase Subscription Backend Deployment Guide
 
-This guide will help you deploy the comprehensive Firebase subscription backend system with Google Play, Apple App Store, and Moov payment integrations.
+This guide will help you deploy the comprehensive Firebase subscription backend system with Google Play and Apple App Store integrations.
 
 ## Prerequisites
 
@@ -21,9 +21,7 @@ This guide will help you deploy the comprehensive Firebase subscription backend 
    - Generate App Store Connect API key
    - Note down the shared secret for in-app purchases
 
-4. **Moov Account Setup**
-   - Create a Moov developer account
-   - Obtain API keys and access tokens
+
 
 ## Installation Steps
 
@@ -54,10 +52,7 @@ firebase functions:config:set apple.shared_secret="your-apple-shared-secret"
 firebase functions:config:set apple.bundle_id="com.yourapp.bundle"
 firebase functions:config:set apple.webhook_secret="your-apple-webhook-secret"
 
-# Moov Configuration
-firebase functions:config:set moov.api_key="your-moov-api-key"
-firebase functions:config:set moov.access_token="your-moov-access-token"
-firebase functions:config:set moov.base_url="https://api.moov.io"
+# Additional payment processor configurations can be added here as needed
 ```
 
 ### 3. Deploy Functions
@@ -122,11 +117,9 @@ service cloud.firestore {
    - Production Server URL: `https://your-region-your-project-id.cloudfunctions.net/appleAppStoreWebhook`
    - Sandbox Server URL: `https://your-region-your-project-id.cloudfunctions.net/appleAppStoreWebhook`
 
-### Moov Webhooks
+### Additional Webhook Configuration
 
-1. Configure Moov webhooks in your Moov dashboard
-2. Set endpoint URL: `https://your-region-your-project-id.cloudfunctions.net/moovWebhook`
-3. Subscribe to events: `account.created`, `transfer.completed`, `transfer.failed`, `payment_method.created`
+Additional payment processor webhooks can be configured as needed for future integrations.
 
 ## Testing
 
@@ -251,4 +244,3 @@ For additional support:
 - Firebase Documentation: https://firebase.google.com/docs/functions
 - Google Play Billing: https://developer.android.com/google/play/billing
 - Apple In-App Purchase: https://developer.apple.com/in-app-purchase/
-- Moov API Documentation: https://docs.moov.io/

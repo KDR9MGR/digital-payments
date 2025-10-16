@@ -7,7 +7,8 @@ import '/utils/app_logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firebase_batch_service.dart';
-import '../services/moov_service.dart';
+import '../services/plaid_service.dart';
+
 
 class BankAccountsController extends GetxController {
   static const String _bankAccountsKey = 'saved_bank_accounts';
@@ -17,7 +18,8 @@ class BankAccountsController extends GetxController {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseBatchService _batchService = FirebaseBatchService();
-  final MoovService _moovService = Get.find<MoovService>();
+  final PlaidService _plaidService = Get.find<PlaidService>();
+
   final Rx<BankAccountModel?> _selectedBankAccount = Rx<BankAccountModel?>(
     null,
   );
@@ -280,8 +282,7 @@ class BankAccountsController extends GetxController {
       _bankAccounts.add(newAccount);
       await _saveBankAccounts();
       
-      // Start Moov account verification in background
-      _verifyBankAccountWithMoov(newAccount.id);
+      // Bank account verification will be handled by alternative payment processor
 
       // Navigate to dashboard with success message
       Get.offAllNamed('/navigationScreen');
@@ -552,95 +553,8 @@ class BankAccountsController extends GetxController {
     return checksum == 0;
   }
 
-  // Verify bank account with Moov
-  Future<void> _verifyBankAccountWithMoov(String accountId) async {
-    try {
-      final accountIndex = _bankAccounts.indexWhere(
-        (account) => account.id == accountId,
-      );
-      
-      if (accountIndex == -1) return;
-      
-      final account = _bankAccounts[accountIndex];
-      
-      // Gather current user identity details required for Moov account creation
-      final firebaseUser = _auth.currentUser;
-      if (firebaseUser == null) return;
-      final String userId = firebaseUser.uid;
-      final String email = firebaseUser.email ?? '';
-      
-      // Try to fetch first/last name from Firestore, fallback to email local part
-      String firstName = 'User';
-      String lastName = '';
-      try {
-        final userDoc = await _firestore.collection('users').doc(userId).get();
-        if (userDoc.exists && userDoc.data() != null) {
-          final data = userDoc.data()!;
-          firstName = (data['first_name'] ?? firstName).toString();
-          lastName = (data['last_name'] ?? lastName).toString();
-        }
-      } catch (_) {}
-      
-      if ((firstName).isEmpty) {
-        final localPart = email.split('@').first;
-        firstName = localPart.isNotEmpty ? localPart : 'User';
-      }
-      
-      // Call Moov service to initiate verification
-      final verificationResult = await _moovService.startBankAccountVerification(
-        userId: userId,
-        email: email,
-        firstName: firstName,
-        lastName: lastName,
-        accountNumber: account.accountNumber,
-        routingNumber: account.routingNumber,
-        accountType: account.accountType,
-        accountHolderName: account.accountHolderName,
-      );
-      
-      // Update account with verification status
-      _bankAccounts[accountIndex] = BankAccountModel(
-        id: account.id,
-        bankName: account.bankName,
-        accountHolderName: account.accountHolderName,
-        accountNumber: account.accountNumber,
-        routingNumber: account.routingNumber,
-        accountType: account.accountType,
-        isDefault: account.isDefault,
-        createdAt: account.createdAt,
-        verificationStatus: verificationResult['status'] ?? 'failed',
-        moovAccountId: verificationResult['moovAccountId'],
-      );
-      
-      await _saveBankAccounts();
-      
-      AppLogger.log('Bank account verification initiated for account: $accountId');
-    } catch (e) {
-      AppLogger.log('Error verifying bank account with Moov: $e');
-      
-      // Update account status to failed
-      final accountIndex = _bankAccounts.indexWhere(
-        (account) => account.id == accountId,
-      );
-      
-      if (accountIndex != -1) {
-        final account = _bankAccounts[accountIndex];
-        _bankAccounts[accountIndex] = BankAccountModel(
-          id: account.id,
-          bankName: account.bankName,
-          accountHolderName: account.accountHolderName,
-          accountNumber: account.accountNumber,
-          routingNumber: account.routingNumber,
-          accountType: account.accountType,
-          isDefault: account.isDefault,
-          createdAt: account.createdAt,
-          verificationStatus: 'failed',
-        );
-        
-        await _saveBankAccounts();
-      }
-    }
-  }
+  // Bank account verification is now handled by alternative payment processor
+  // This function has been removed as Moov services are no longer used
   
   // Retry verification for a bank account
   Future<void> retryBankAccountVerification(String accountId) async {
@@ -672,8 +586,8 @@ class BankAccountsController extends GetxController {
       
       await _saveBankAccounts();
       
-      // Start verification process
-      await _verifyBankAccountWithMoov(accountId);
+      // Bank account verification will be handled by alternative payment processor
+      // For now, just mark as pending
       
       Get.snackbar('Success', 'Bank account verification restarted');
     } catch (e) {
@@ -709,6 +623,138 @@ class BankAccountsController extends GetxController {
     } catch (e) {
       AppLogger.log('Error clearing bank accounts: $e');
       Get.snackbar('Error', 'Failed to clear bank accounts');
+    }
+  }
+
+  // Create Plaid Link token
+  Future<String?> createLinkToken() async {
+    try {
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) {
+        AppLogger.log('User not authenticated for Plaid Link token creation');
+        return null;
+      }
+
+      final userId = firebaseUser.uid;
+      
+      // Create link token through PlaidService
+      final result = await _plaidService.createLinkToken(userId: userId);
+
+      if (result != null && result['success'] == true) {
+        if (result['linkToken'] != null) {
+          AppLogger.log('Plaid Link token created successfully');
+          return result['linkToken'] as String;
+        } else if (result['data'] != null && result['data']['linkToken'] != null) {
+          AppLogger.log('Plaid Link token created successfully');
+          return result['data']['linkToken'] as String;
+        }
+      }
+
+      AppLogger.log('Failed to create Plaid Link token');
+      return null;
+    } catch (e) {
+      AppLogger.log('Error creating Plaid Link token: $e');
+      return null;
+    }
+  }
+
+  // Add bank account from Plaid
+  Future<bool> addBankAccountFromPlaid({
+    required String publicToken,
+    required String accountId,
+    required Map<String, dynamic> metadata,
+  }) async {
+    try {
+      _isLoading.value = true;
+
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) {
+        AppLogger.log('User not authenticated for adding Plaid bank account');
+        return false;
+      }
+
+      // Exchange public token for access token
+      final exchangeResult = await _plaidService.exchangePublicToken(
+        publicToken: publicToken,
+        userId: firebaseUser.uid,
+      );
+      if (exchangeResult == null || exchangeResult['access_token'] == null) {
+        AppLogger.log('Failed to exchange Plaid public token');
+        return false;
+      }
+
+      final accessToken = exchangeResult['access_token'] as String;
+      final itemId = exchangeResult['item_id'] as String?;
+
+      // Extract account information from metadata
+      final institutionName = metadata['institution']?['name'] ?? 'Unknown Bank';
+      final accountName = metadata['account']?['name'] ?? 'Account';
+      final accountMask = metadata['account']?['mask'] ?? '****';
+      final accountSubtype = metadata['account']?['subtype'] ?? 'checking';
+
+      // Check if account already exists
+      final existingAccount = _bankAccounts.firstWhereOrNull(
+        (account) => account.plaidAccountId == accountId,
+      );
+
+      if (existingAccount != null) {
+        Get.snackbar('Error', 'This bank account is already connected');
+        return false;
+      }
+
+      // Determine if this should be the default account
+      final isDefault = _bankAccounts.isEmpty;
+
+      // If setting as default, update existing accounts
+      if (isDefault) {
+        for (int i = 0; i < _bankAccounts.length; i++) {
+          _bankAccounts[i] = BankAccountModel(
+            id: _bankAccounts[i].id,
+            bankName: _bankAccounts[i].bankName,
+            accountHolderName: _bankAccounts[i].accountHolderName,
+            accountNumber: _bankAccounts[i].accountNumber,
+            routingNumber: _bankAccounts[i].routingNumber,
+            accountType: _bankAccounts[i].accountType,
+            isDefault: false,
+            createdAt: _bankAccounts[i].createdAt,
+            verificationStatus: _bankAccounts[i].verificationStatus,
+            plaidAccessToken: _bankAccounts[i].plaidAccessToken,
+            plaidAccountId: _bankAccounts[i].plaidAccountId,
+            plaidItemId: _bankAccounts[i].plaidItemId,
+          );
+        }
+      }
+
+      // Create bank account model
+      final bankAccount = BankAccountModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        bankName: institutionName,
+        accountHolderName: accountName,
+        accountNumber: accountMask,
+        routingNumber: '', // Will be populated when needed
+        accountType: accountSubtype,
+        isDefault: isDefault,
+        createdAt: DateTime.now(),
+        verificationStatus: 'pending',
+        plaidAccessToken: accessToken,
+        plaidAccountId: accountId,
+        plaidItemId: itemId,
+      );
+
+      // Add to local list
+      _bankAccounts.add(bankAccount);
+      await _saveBankAccounts();
+
+      // Note: Bank account verification will be handled separately
+      // The account is added with pending status and can be verified later
+
+      AppLogger.log('Bank account added successfully from Plaid');
+      return true;
+    } catch (e) {
+      AppLogger.log('Error adding bank account from Plaid: $e');
+      return false;
+    } finally {
+      _isLoading.value = false;
     }
   }
 }

@@ -11,10 +11,7 @@ const path = require('path');
 admin.initializeApp();
 const db = admin.firestore();
 
-// Moov API functions are imported from moov_api.js which handles OAuth2 authentication
-
-// Wire in modular function exports (moov API callable functions)
-Object.assign(exports, require('./moov_api'));
+// Additional payment processor functions can be added here as needed
 
 // Environment configuration for webhook validation
 const GOOGLE_PLAY_WEBHOOK_SECRET = functions.config().google_play?.webhook_secret || 'your_google_play_webhook_secret';
@@ -38,37 +35,7 @@ const APPLE_WEBHOOK_SECRET = functions.config().apple?.webhook_secret || 'your_a
 
 
 
-// Moov webhook handler
-exports.moovWebhook = functions.https.onRequest(async (req, res) => {
-  try {
-    const event = req.body;
-    
-    console.log('Received Moov webhook:', event.type);
-    
-    // Handle different Moov event types
-    switch (event.type) {
-      case 'account.created':
-        await handleAccountCreated(event);
-        break;
-      case 'transfer.completed':
-        await handleTransferCompleted(event);
-        break;
-      case 'transfer.failed':
-        await handleTransferFailed(event);
-        break;
-      case 'payment_method.created':
-        await handlePaymentMethodCreated(event);
-        break;
-      default:
-        console.log(`Unhandled Moov event type: ${event.type}`);
-    }
-    
-    res.status(200).json({received: true});
-  } catch (error) {
-    console.error('Error handling Moov webhook:', error);
-    res.status(500).json({error: 'Webhook processing failed'});
-  }
-});
+// Additional webhook handlers can be added here as needed
 
 // Delete account function for web-based account deletion
 exports.deleteAccount = functions.https.onRequest(async (req, res) => {
@@ -188,89 +155,7 @@ exports.deleteAccount = functions.https.onRequest(async (req, res) => {
   }
 });
 
-// Handle account created event
-async function handleAccountCreated(event) {
-  try {
-    const accountData = event.data;
-    console.log('Account created:', accountData.accountID);
-    
-    // Store account info in Firestore if needed
-    if (accountData.foreignId) {
-      await db.collection('users').doc(accountData.foreignId).set({
-        moovAccountId: accountData.accountID,
-        moovAccountStatus: accountData.status,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-  } catch (error) {
-    console.error('Error handling account created:', error);
-  }
-}
-
-// Handle transfer completed event
-async function handleTransferCompleted(event) {
-  try {
-    const transferData = event.data;
-    console.log('Transfer completed:', transferData.transferID);
-    
-    // Update subscription status if this was a subscription payment
-    if (transferData.metadata && transferData.metadata.subscriptionId) {
-      await db.collection('subscriptions').doc(transferData.metadata.subscriptionId).update({
-        status: 'active',
-        lastPaymentDate: FieldValue.serverTimestamp(),
-        transferId: transferData.transferID,
-        paymentStatus: 'completed',
-      });
-      
-      // Store payment record
-      await db.collection('payments').add({
-        subscriptionId: transferData.metadata.subscriptionId,
-        transferId: transferData.transferID,
-        amount: transferData.amount.value,
-        currency: transferData.amount.currency,
-        status: 'completed',
-        userId: transferData.metadata.userId,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-    }
-  } catch (error) {
-    console.error('Error handling transfer completed:', error);
-  }
-}
-
-// Handle transfer failed event
-async function handleTransferFailed(event) {
-  try {
-    const transferData = event.data;
-    console.log('Transfer failed:', transferData.transferID);
-    
-    // Update subscription status if this was a subscription payment
-    if (transferData.metadata && transferData.metadata.subscriptionId) {
-      await db.collection('subscriptions').doc(transferData.metadata.subscriptionId).update({
-        status: 'payment_failed',
-        lastPaymentAttempt: FieldValue.serverTimestamp(),
-        transferId: transferData.transferID,
-        paymentStatus: 'failed',
-        failureReason: transferData.failureReason || 'Payment failed',
-      });
-    }
-  } catch (error) {
-    console.error('Error handling transfer failed:', error);
-  }
-}
-
-// Handle payment method created event
-async function handlePaymentMethodCreated(event) {
-  try {
-    const paymentMethodData = event.data;
-    console.log('Payment method created:', paymentMethodData.paymentMethodID);
-    
-    // Store payment method info if needed
-    // This is typically handled on the client side
-  } catch (error) {
-    console.error('Error handling payment method created:', error);
-  }
-}
+// Additional event handlers can be added here as needed
 
 // Check user subscription status
 exports.checkSubscriptionStatus = functions.https.onCall(async (data, context) => {
@@ -673,10 +558,9 @@ exports.validatePlatformPayment = functions
   }
 });
 
-// Create Moov account
-// NOTE: createMoovAccount removed - Moov is now only for send/receive money, not subscriptions
+// Additional account creation functions can be added here as needed
 
-// NOTE: processMoovSubscription removed - subscriptions now use in-app purchases only
+// NOTE: Subscriptions now use in-app purchases only
 
 // ============================================================================
 // COMPREHENSIVE SUBSCRIPTION BACKEND SYSTEM
@@ -906,7 +790,7 @@ exports.processSubscriptionRenewals = functions.pubsub.schedule('0 2 * * *')
             case 'apple_pay':
               renewalResult = await processApplePayRenewal(subscription, doc.id);
               break;
-            // NOTE: Moov subscriptions removed - only in-app purchases supported
+            // NOTE: Only in-app purchases supported for subscriptions
             default:
               console.log(`Unknown payment method: ${subscription.paymentMethod}`);
           }
@@ -1551,8 +1435,8 @@ async function processApplePayRenewal(subscription, subscriptionId) {
   }
 }
 
-// Process Moov renewal
-// NOTE: processMoovRenewal removed - subscriptions now use in-app purchases only
+// Additional renewal processors can be added here as needed
+// NOTE: Subscriptions now use in-app purchases only
 
 // ============================================================================
 // WEBHOOK NOTIFICATION HANDLERS

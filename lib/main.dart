@@ -17,7 +17,7 @@ import 'package:xpay/views/auth/wallet_view_model.dart';
 import 'controller/auth_controller.dart';
 import 'controller/subscription_controller.dart';
 import 'controller/bank_accounts_controller.dart';
-import 'services/moov_service.dart';
+import 'services/plaid_service.dart';
 import 'services/platform_payment_service.dart';
 import 'services/subscription_service.dart';
 
@@ -80,7 +80,7 @@ void main() async {
 
         // Initialize services first
         Get.put(SubscriptionService());
-        Get.put(MoovService());
+        Get.put(PlaidService());
         
         // Initialize controllers
         Get.put(AuthController());
@@ -158,10 +158,10 @@ void _initializeServicesInBackground() {
     }
     
     try {
-      await MoovService.init().timeout(const Duration(seconds: 10));
-      AppLogger.log('Moov initialized successfully');
+      await PlaidService.init().timeout(const Duration(seconds: 10));
+      AppLogger.log('Sila initialized successfully');
     } catch (e) {
-      AppLogger.log('Moov initialization error: $e');
+      AppLogger.log('Sila initialization error: $e');
     }
     
     try {

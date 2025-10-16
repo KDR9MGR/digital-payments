@@ -9,10 +9,13 @@ class BankAccountModel {
   final String accountType;
   final bool isDefault;
   final DateTime createdAt;
-  final String? moovAccountId;
+  final String? accountId;
   final String verificationStatus;
   final String? verificationError;
   final DateTime? lastVerified;
+  final String? plaidAccessToken;
+  final String? plaidAccountId;
+  final String? plaidItemId;
 
   BankAccountModel({
     required this.id,
@@ -23,10 +26,13 @@ class BankAccountModel {
     required this.accountType,
     this.isDefault = false,
     required this.createdAt,
-    this.moovAccountId,
+    this.accountId,
     this.verificationStatus = 'pending',
     this.verificationError,
     this.lastVerified,
+    this.plaidAccessToken,
+    this.plaidAccountId,
+    this.plaidItemId,
   });
 
   // Convert to JSON for storage
@@ -40,10 +46,13 @@ class BankAccountModel {
       'accountType': accountType,
       'isDefault': isDefault,
       'createdAt': createdAt.toIso8601String(),
-      'moovAccountId': moovAccountId,
+      'accountId': accountId,
       'verificationStatus': verificationStatus,
       'verificationError': verificationError,
       'lastVerified': lastVerified?.toIso8601String(),
+      'plaidAccessToken': plaidAccessToken,
+      'plaidAccountId': plaidAccountId,
+      'plaidItemId': plaidItemId,
     };
   }
 
@@ -58,12 +67,15 @@ class BankAccountModel {
       accountType: json['accountType'],
       isDefault: json['isDefault'] ?? false,
       createdAt: DateTime.parse(json['createdAt']),
-      moovAccountId: json['moovAccountId'],
+      accountId: json['accountId'],
       verificationStatus: json['verificationStatus'] ?? 'pending',
       verificationError: json['verificationError'],
       lastVerified: json['lastVerified'] != null 
           ? DateTime.parse(json['lastVerified']) 
           : null,
+      plaidAccessToken: json['plaidAccessToken'],
+      plaidAccountId: json['plaidAccountId'],
+      plaidItemId: json['plaidItemId'],
     );
   }
 
@@ -79,7 +91,7 @@ class BankAccountModel {
   bool get isVerified => verificationStatus == 'verified';
   bool get isPending => verificationStatus == 'pending';
   bool get isFailed => verificationStatus == 'failed';
-  bool get isLinkedToMoov => moovAccountId != null;
+  bool get isLinked => accountId != null;
   
   // Get verification status display text
   String get verificationStatusText {
@@ -119,10 +131,13 @@ class BankAccountModel {
     String? accountType,
     bool? isDefault,
     DateTime? createdAt,
-    String? moovAccountId,
+    String? accountId,
     String? verificationStatus,
     String? verificationError,
     DateTime? lastVerified,
+    String? plaidAccessToken,
+    String? plaidAccountId,
+    String? plaidItemId,
   }) {
     return BankAccountModel(
       id: id ?? this.id,
@@ -133,10 +148,13 @@ class BankAccountModel {
       accountType: accountType ?? this.accountType,
       isDefault: isDefault ?? this.isDefault,
       createdAt: createdAt ?? this.createdAt,
-      moovAccountId: moovAccountId ?? this.moovAccountId,
+      accountId: accountId ?? this.accountId,
       verificationStatus: verificationStatus ?? this.verificationStatus,
       verificationError: verificationError ?? this.verificationError,
       lastVerified: lastVerified ?? this.lastVerified,
+      plaidAccessToken: plaidAccessToken ?? this.plaidAccessToken,
+      plaidAccountId: plaidAccountId ?? this.plaidAccountId,
+      plaidItemId: plaidItemId ?? this.plaidItemId,
     );
   }
 }

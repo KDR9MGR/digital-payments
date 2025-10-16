@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:xpay/controller/bank_accounts_controller.dart';
 import 'package:xpay/data/bank_account_model.dart';
 import 'package:xpay/utils/custom_color.dart';
@@ -8,8 +10,54 @@ import 'package:xpay/utils/dimensions.dart';
 import 'package:xpay/utils/strings.dart';
 import 'package:xpay/widgets/primary_appbar.dart';
 
-class BankInfoScreen extends StatelessWidget {
+class BankInfoScreen extends StatefulWidget {
   const BankInfoScreen({super.key});
+
+  @override
+  State<BankInfoScreen> createState() => _BankInfoScreenState();
+}
+
+class _BankInfoScreenState extends State<BankInfoScreen> {
+  StreamSubscription<LinkSuccess>? _streamSuccess;
+  StreamSubscription<LinkEvent>? _streamEvent;
+  StreamSubscription<LinkExit>? _streamExit;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupPlaidStreams();
+  }
+
+  @override
+  void dispose() {
+    _streamSuccess?.cancel();
+    _streamEvent?.cancel();
+    _streamExit?.cancel();
+    super.dispose();
+  }
+
+  void _setupPlaidStreams() {
+    final bankAccountsController = Get.put(BankAccountsController());
+    
+    _streamSuccess = PlaidLink.onSuccess.listen((LinkSuccess success) {
+      _handlePlaidSuccess(success.publicToken, success.metadata, bankAccountsController);
+    });
+
+    _streamEvent = PlaidLink.onEvent.listen((LinkEvent event) {
+      print('Plaid Link Event: ${event.name}');
+    });
+
+    _streamExit = PlaidLink.onExit.listen((LinkExit exit) {
+      if (exit.error != null) {
+        Get.snackbar(
+          'Connection Cancelled',
+          exit.error?.description() ?? 'Bank connection was cancelled',
+          backgroundColor: Colors.orange.withValues(alpha: 0.8),
+          colorText: Colors.white,
+        );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +91,7 @@ class BankInfoScreen extends StatelessWidget {
       body: Obx(() => _bodyWidget(context, bankAccountsController)),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          _showAddBankAccountDialog(context, bankAccountsController);
+          _initiatePlaidLink(context, bankAccountsController);
         },
         backgroundColor: CustomColor.primaryColor,
         child: const Icon(Icons.add),
@@ -87,10 +135,10 @@ class BankInfoScreen extends StatelessWidget {
             const SizedBox(height: 30),
             ElevatedButton.icon(
               onPressed: () {
-                _showAddBankAccountDialog(context, controller);
+                _initiatePlaidLink(context, controller);
               },
               icon: const Icon(Icons.add),
-              label: const Text('Add Bank Account'),
+              label: const Text('Connect Bank Account'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: CustomColor.primaryColor,
                 foregroundColor: Colors.white,
@@ -331,185 +379,167 @@ class BankInfoScreen extends StatelessWidget {
     );
   }
 
-  void _showAddBankAccountDialog(BuildContext context, BankAccountsController controller) {
-    final formKey = GlobalKey<FormState>();
-    final bankNameController = TextEditingController();
-    final accountHolderController = TextEditingController();
-    final accountNumberController = TextEditingController();
-    final routingNumberController = TextEditingController();
-    String selectedAccountType = 'Checking';
-
-    Get.dialog(
-      AlertDialog(
-        backgroundColor: CustomColor.surfaceColor,
-        title: Text(
-          'Add Bank Account',
-          style: CustomStyle.commonTextTitleWhite,
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: bankNameController,
-                    style: CustomStyle.commonTextTitleWhite,
-                    decoration: InputDecoration(
-                      labelText: 'Bank Name',
-                      labelStyle: TextStyle(color: Colors.grey[400]),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor.withValues(alpha: 0.4)),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter bank name';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: accountHolderController,
-                    style: CustomStyle.commonTextTitleWhite,
-                    decoration: InputDecoration(
-                      labelText: 'Account Holder Name',
-                      labelStyle: TextStyle(color: Colors.grey[400]),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor.withValues(alpha: 0.4)),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter account holder name';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: accountNumberController,
-                    style: CustomStyle.commonTextTitleWhite,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Account Number',
-                      labelStyle: TextStyle(color: Colors.grey[400]),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor.withValues(alpha: 0.4)),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter account number';
-                      }
-                      if (!RegExp(r'^\d+$').hasMatch(value.trim())) {
-                        return 'Account number should contain only digits';
-                      }
-                      if (value.trim().length < 8 || value.trim().length > 17) {
-                        return 'Account number should be 8-17 digits';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: routingNumberController,
-                    style: CustomStyle.commonTextTitleWhite,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Routing Number',
-                      labelStyle: TextStyle(color: Colors.grey[400]),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor.withValues(alpha: 0.4)),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter routing number';
-                      }
-                      if (!RegExp(r'^\d{9}$').hasMatch(value.trim())) {
-                        return 'Routing number should be exactly 9 digits';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedAccountType,
-                    style: CustomStyle.commonTextTitleWhite,
-                    dropdownColor: CustomColor.surfaceColor,
-                    decoration: InputDecoration(
-                      labelText: 'Account Type',
-                      labelStyle: TextStyle(color: Colors.grey[400]),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor.withValues(alpha: 0.4)),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: CustomColor.primaryColor),
-                      ),
-                    ),
-                    items: ['Checking', 'Savings'].map((type) {
-                      return DropdownMenuItem<String>(
-                        value: type,
-                        child: Text(type),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      selectedAccountType = value!;
-                    },
-                  ),
-                ],
+  void _initiatePlaidLink(BuildContext context, BankAccountsController controller) async {
+    try {
+      // Show loading indicator
+      Get.dialog(
+        AlertDialog(
+          backgroundColor: CustomColor.surfaceColor,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: CustomColor.primaryColor),
+              SizedBox(height: 16),
+              Text(
+                'Initializing secure bank connection...',
+                style: CustomStyle.commonTextTitleWhite,
+                textAlign: TextAlign.center,
               ),
-            ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Get.back();
-            },
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey[400]),
-            ),
+        barrierDismissible: false,
+      );
+
+      // Create link token through PlaidService
+      final linkToken = await controller.createLinkToken();
+      
+      // Close loading dialog
+      Get.back();
+      
+      if (linkToken == null) {
+        Get.snackbar(
+          'Error',
+          'Failed to initialize bank connection. Please try again.',
+          backgroundColor: Colors.red.withValues(alpha: 0.8),
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      // Configure Plaid Link using LinkTokenConfiguration
+      final configuration = LinkTokenConfiguration(
+        token: linkToken,
+      );
+
+      // Create PlaidLink handler
+      await PlaidLink.create(configuration: configuration);
+
+      // Open Plaid Link (streams are already set up in initState)
+      PlaidLink.open();
+      
+    } catch (e) {
+      // Close loading dialog if still open
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+      
+      Get.snackbar(
+        'Error',
+        'Failed to start bank connection: ${e.toString()}',
+        backgroundColor: Colors.red.withValues(alpha: 0.8),
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  void _handlePlaidSuccess(String publicToken, dynamic metadata, BankAccountsController controller) async {
+    try {
+      // Show processing dialog
+      Get.dialog(
+        AlertDialog(
+          backgroundColor: CustomColor.surfaceColor,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: CustomColor.primaryColor),
+              SizedBox(height: 16),
+              Text(
+                'Connecting your bank account...',
+                style: CustomStyle.commonTextTitleWhite,
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
-          Obx(() => TextButton(
-            onPressed: controller.isLoading ? null : () async {
-              if (formKey.currentState!.validate()) {
-                final success = await controller.addBankAccount(
-                  bankName: bankNameController.text,
-                  accountHolderName: accountHolderController.text,
-                  accountNumber: accountNumberController.text,
-                  routingNumber: routingNumberController.text,
-                  accountType: selectedAccountType,
-                );
-                if (success) {
-                  Get.back();
-                }
-              }
-            },
-            child: Text(
-              controller.isLoading ? 'Adding...' : 'Add Account',
-              style: TextStyle(color: CustomColor.primaryColor),
-            ),
-          )),
-        ],
-      ),
-    );
+        ),
+        barrierDismissible: false,
+      );
+
+      // Convert metadata to Map for easier access
+      Map<String, dynamic> metadataMap = {};
+      if (metadata != null) {
+        // Handle different metadata formats
+        if (metadata is Map<String, dynamic>) {
+          metadataMap = metadata;
+        } else {
+          // Try to extract properties from the metadata object
+          try {
+            metadataMap = {
+              'institution': {
+                'name': metadata.institution?.name ?? 'Unknown Bank',
+                'id': metadata.institution?.id ?? '',
+              },
+              'account': {
+                'id': metadata.accounts?.isNotEmpty == true ? metadata.accounts.first.id : '',
+                'name': metadata.accounts?.isNotEmpty == true ? metadata.accounts.first.name : 'Account',
+                'mask': metadata.accounts?.isNotEmpty == true ? metadata.accounts.first.mask : '****',
+                'subtype': metadata.accounts?.isNotEmpty == true ? metadata.accounts.first.subtype?.name ?? 'checking' : 'checking',
+              },
+            };
+          } catch (e) {
+            print('Error parsing metadata: $e');
+            metadataMap = {
+              'institution': {'name': 'Unknown Bank', 'id': ''},
+              'account': {'id': '', 'name': 'Account', 'mask': '****', 'subtype': 'checking'},
+            };
+          }
+        }
+      }
+
+      // Get the first account ID
+      final accountId = metadataMap['account']?['id'] ?? '';
+      if (accountId.isEmpty) {
+        throw Exception('No account ID found in metadata');
+      }
+
+      // Exchange public token for access token and add bank account
+      final success = await controller.addBankAccountFromPlaid(
+        publicToken: publicToken,
+        accountId: accountId,
+        metadata: metadataMap,
+      );
+
+      // Close processing dialog
+      Get.back();
+
+      if (success) {
+        Get.snackbar(
+          'Success',
+          'Bank account connected successfully!',
+          backgroundColor: Colors.green.withValues(alpha: 0.8),
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        Get.snackbar(
+          'Error',
+          'Failed to connect bank account. Please try again.',
+          backgroundColor: Colors.red.withValues(alpha: 0.8),
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      // Close processing dialog if still open
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+      
+      Get.snackbar(
+        'Error',
+        'Failed to process bank connection: ${e.toString()}',
+        backgroundColor: Colors.red.withValues(alpha: 0.8),
+        colorText: Colors.white,
+      );
+    }
   }
 }

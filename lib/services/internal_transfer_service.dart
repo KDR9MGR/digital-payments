@@ -8,6 +8,7 @@ import '../utils/crash_prevention.dart';
 import 'firebase_batch_service.dart';
 import 'firebase_cache_service.dart';
 import 'firebase_query_optimizer.dart';
+import 'api_service.dart';
 
 class InternalTransferService {
   static final InternalTransferService _instance =
@@ -20,8 +21,114 @@ class InternalTransferService {
   final FirebaseBatchService _batchService = FirebaseBatchService();
   final FirebaseCacheService _cacheService = FirebaseCacheService();
   final FirebaseQueryOptimizer _queryOptimizer = FirebaseQueryOptimizer();
+  final ApiService _apiService = ApiService();
 
-  /// Transfer money between users with enhanced security
+  /// Transfer money between users via backend API
+  Future<Map<String, dynamic>> transferMoneyViaAPI({
+    required String recipientAccountId,
+    required double amount,
+    required String currency,
+    String? description,
+  }) async {
+    try {
+      // Security validation
+      if (amount <= 0) {
+        throw Exception('Transfer amount must be greater than zero');
+      }
+
+      if (amount > 10000) {
+        throw Exception('Transfer amount exceeds daily limit of \$10,000');
+      }
+
+      User? currentUser = _auth.currentUser;
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Get current user's account ID from Firestore
+      final userData = await _queryOptimizer.getUserData(currentUser.uid);
+      if (userData == null) {
+        throw Exception('User data not found');
+      }
+
+      final sourceAccountId = userData['accountId'];
+      if (sourceAccountId == null) {
+        throw Exception('Source account not found. Please create an account first.');
+      }
+
+      AppLogger.log('Creating transfer via backend API: $sourceAccountId -> $recipientAccountId');
+
+      // Create transfer via backend API
+      final response = await _apiService.createTransfer(
+        sourceAccountId: sourceAccountId,
+        destinationAccountId: recipientAccountId,
+        amount: amount,
+        currency: currency,
+        description: description,
+      );
+
+      if (response.isSuccess) {
+        final transferId = response.data?['transferId'];
+        AppLogger.log('Transfer created successfully: $transferId');
+
+        // Create local transaction record for tracking
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final transactionId = '${timestamp}_${currentUser.uid.substring(0, 8)}_api_transfer';
+
+        final transaction = TransactionModel(
+          transactionId: transactionId,
+          userId: currentUser.uid,
+          amount: -amount, // Negative for outgoing
+          timestamp: DateTime.now(),
+          type: 'api_transfer_send',
+          currency: currency,
+        );
+
+        final transactionData = transaction.toMap();
+        transactionData['recipient_account_id'] = recipientAccountId;
+        transactionData['transfer_id'] = transferId;
+        transactionData['backend_transfer_data'] = response.data;
+        if (description != null && description.isNotEmpty) {
+          transactionData['description'] = description;
+        }
+
+        // Save transaction record to Firestore
+        await _batchService.addWrite(
+          collection: 'transactions',
+          documentId: transaction.transactionId,
+          data: transactionData,
+        );
+        await _batchService.flushBatch();
+
+        // Invalidate user cache
+        await _cacheService.invalidateUserCaches(currentUser.uid);
+
+        return {
+          'success': true,
+          'transferId': transferId,
+          'transactionId': transactionId,
+          'amount': amount,
+          'currency': currency,
+          'message': 'Transfer completed successfully',
+          'data': response.data,
+        };
+      } else {
+        AppLogger.log('Transfer failed: ${response.error}');
+        return {
+          'success': false,
+          'error': response.error ?? 'Transfer failed',
+        };
+      }
+    } catch (e) {
+      AppLogger.log('Transfer error: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Transfer money between users with enhanced security (Firebase-based fallback)
   Future<Map<String, dynamic>> transferMoney({
     required String recipientEmail,
     required double amount,
@@ -323,7 +430,75 @@ class InternalTransferService {
     }
   }
 
-  /// Get transfer history for current user
+  /// Get transfer history for current user via backend API
+  Future<List<TransactionModel>> getTransferHistoryViaAPI({
+    int limit = 20,
+    String? currency,
+  }) async {
+    try {
+      User? currentUser = _auth.currentUser;
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+
+      AppLogger.info(
+        'Getting transfer history via API for user: ${currentUser.uid}',
+        tag: 'InternalTransferService',
+      );
+
+      // Get transfer history from backend API
+      final response = await _apiService.getTransferHistory(
+        limit: limit,
+        currency: currency,
+      );
+
+      if (response.isSuccess && response.data != null) {
+        final List<dynamic> transfersData = response.data!['transfers'] as List<dynamic>? ?? [];
+        
+        // Convert API response to TransactionModel objects
+        final List<TransactionModel> transfers = transfersData.map((transferData) {
+          return TransactionModel.fromMap({
+            'transactionId': transferData['id'] ?? '',
+            'userId': currentUser.uid,
+            'type': transferData['type'] ?? 'internal_transfer',
+            'amount': (transferData['amount'] as num?)?.toDouble() ?? 0.0,
+            'currency': transferData['currency'] ?? 'USD',
+            'recipientEmail': transferData['recipient_email'] ?? '',
+            'recipientName': transferData['recipient_name'] ?? '',
+            'description': transferData['description'] ?? '',
+            'status': transferData['status'] ?? 'completed',
+            'timestamp': transferData['created_at'] != null 
+                ? Timestamp.fromDate(DateTime.parse(transferData['created_at']))
+                : Timestamp.now(),
+            'metadata': transferData['metadata'] ?? {},
+          });
+        }).toList();
+
+        AppLogger.info(
+          'Successfully retrieved ${transfers.length} transfers from API',
+          tag: 'InternalTransferService',
+        );
+
+        return transfers;
+      } else {
+        throw Exception(response.error ?? 'Failed to get transfer history');
+      }
+    } catch (e) {
+      AppLogger.error(
+        'Error getting transfer history via API: $e',
+        tag: 'InternalTransferService',
+      );
+      
+      // Fallback to Firebase method
+      AppLogger.info(
+        'Falling back to Firebase for transfer history',
+        tag: 'InternalTransferService',
+      );
+      return await getTransferHistory(limit: limit, currency: currency);
+    }
+  }
+
+  /// Get transfer history for current user (Firebase fallback)
   Future<List<TransactionModel>> getTransferHistory({
     int limit = 20,
     String? currency,

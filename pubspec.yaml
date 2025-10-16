@@ -84,6 +84,8 @@ dependencies:
   firebase_messaging: ^16.0.0
   # Google Sign-In for authentication
   google_sign_in: ^6.2.1
+  # Plaid Link SDK for bank account connection
+  plaid_flutter: ^4.0.0
 
 dependency_overrides:
   modal_bottom_sheet: ^3.0.0-pre
