@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Account - Digital Payments</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #d32f2f;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
+        input[type="email"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #d32f2f;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #b71c1c;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #d32f2f;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ Delete Your Digital Payments Account</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Warning:</strong> This action is permanent and cannot be undone. All your data, transaction history, and account information will be permanently deleted.
+        </div>
+
+        <div id="emailForm">
+            <p>To delete your account, please enter your email address. We'll send you a secure confirmation link.</p>
+            <input type="email" id="emailInput" placeholder="Enter your email address" required>
+            <button id="sendLinkBtn">Send Confirmation Link</button>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
+
+        <div id="message"></div>
+    </div>
+
+    <script type="module">
+        // Firebase SDKs
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js';
+        import { 
+            getAuth, 
+            sendSignInLinkToEmail, 
+            isSignInWithEmailLink, 
+            signInWithEmailLink, 
+            onAuthStateChanged 
+        } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNm9dt3TSCwAvRJzNxDnti9H_rZKHk2Cs",
+            authDomain: "digital-payments-52cac.firebaseapp.com",
+            projectId: "digital-payments-52cac",
+            storageBucket: "digital-payments-52cac.appspot.com",
+            messagingSenderId: "1086070277189",
+            appId: "1:1086070277189:web:ddf811e1cfeb425cf68f2c"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        // DOM elements
+        const emailInput = document.getElementById('emailInput');
+        const sendLinkBtn = document.getElementById('sendLinkBtn');
+        const emailForm = document.getElementById('emailForm');
+        const loading = document.getElementById('loading');
+        const messageDiv = document.getElementById('message');
+
+        // Show message function
+        function showMessage(text, type = 'info') {
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+        }
+
+        // Show/hide loading
+        function setLoading(isLoading) {
+            loading.style.display = isLoading ? 'block' : 'none';
+            emailForm.style.display = isLoading ? 'none' : 'block';
+            sendLinkBtn.disabled = isLoading;
+        }
+
+        // Handle page load
+        window.addEventListener('load', async () => {
+            const url = window.location.href;
+            
+            // Check if this is a sign-in link
+            if (isSignInWithEmailLink(auth, url)) {
+                const email = window.localStorage.getItem('emailForSignIn');
+                
+                if (!email) {
+                    showMessage('Please enter your email address to complete account deletion.', 'error');
+                    return;
+                }
+
+                try {
+                    setLoading(true);
+                    
+                    // Sign in with email link
+                    await signInWithEmailLink(auth, email, url);
+                    
+                    // Get ID token
+                    const idToken = await auth.currentUser.getIdToken();
+                    
+                    // Call cloud function to delete account
+                    const response = await fetch('/deleteAccount', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (response.ok) {
+                        showMessage('✅ Your account has been successfully deleted. All your data has been permanently removed.', 'success');
+                        window.localStorage.removeItem('emailForSignIn');
+                    } else {
+                        const errorData = await response.json();
+                        showMessage(`❌ Error deleting account: ${errorData.error || 'Unknown error'}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showMessage(`❌ Failed to delete account: ${error.message}`, 'error');
+                } finally {
+                    setLoading(false);
+                }
+            }
+        });
+
+        // Handle send confirmation link
+        sendLinkBtn.addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            
+            if (!email) {
+                showMessage('Please enter your email address.', 'error');
+                return;
+            }
+
+            if (!email.includes('@')) {
+                showMessage('Please enter a valid email address.', 'error');
+                return;
+            }
+
+            try {
+                setLoading(true);
+                
+                // Store email for later use
+                window.localStorage.setItem('emailForSignIn', email);
+                
+                // Send sign-in link
+                await sendSignInLinkToEmail(auth, email, {
+                    url: window.location.href,
+                    handleCodeInApp: true
+                });
+                
+                showMessage(`📧 A confirmation link has been sent to ${email}. Please check your email and click the link to confirm account deletion.`, 'info');
+                
+            } catch (error) {
+                console.error('Error sending email:', error);
+                showMessage(`❌ Error sending confirmation email: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // Handle Enter key
+        emailInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendLinkBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>
