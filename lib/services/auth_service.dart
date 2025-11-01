@@ -8,8 +8,7 @@ import '../services/firebase_batch_service.dart';
 import '../controller/subscription_controller.dart';
 import '../services/subscription_service.dart';
 import '../services/plaid_service.dart';
-import '../services/api_service.dart';
-
+import '../services/stripe_service.dart';
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
@@ -20,7 +19,7 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseBatchService _batchService = FirebaseBatchService();
   final PlaidService _plaidService = PlaidService();
-  final ApiService _apiService = ApiService();
+  final StripeService _stripeService = StripeService();
 
   User? get currentUser => _auth.currentUser;
   bool get isSignedIn => _auth.currentUser != null;
@@ -33,33 +32,7 @@ class AuthService {
     try {
       AppLogger.log('Attempting email/password sign in for: $email');
 
-      // First authenticate with backend API
-      final apiResponse = await _apiService.login(
-        email: email.trim().toLowerCase(),
-        password: password,
-      );
-
-      if (!apiResponse.isSuccess) {
-        return AuthResult.error(apiResponse.error ?? 'Backend authentication failed');
-      }
-
-      // Set JWT token for future API calls
-      final token = apiResponse.data?['token'];
-      if (token != null) {
-        _apiService.setAuthToken(token);
-        AppLogger.log('Backend authentication successful, JWT token set');
-      }
-
-      // Extract Stripe Connect account information from backend response
-      final stripeConnectId = apiResponse.data?['stripeConnectId'];
-      final stripeCustomerId = apiResponse.data?['stripeCustomerId'];
-      final stripeAccountStatus = apiResponse.data?['stripeAccountStatus'];
-      
-      if (stripeConnectId != null) {
-        AppLogger.log('Stripe Connect account found: $stripeConnectId (Status: $stripeAccountStatus)');
-      }
-
-      // Then authenticate with Firebase
+      // Authenticate with Firebase
       final UserCredential result = await _auth.signInWithEmailAndPassword(
         email: email.trim().toLowerCase(),
         password: password.trim(),
@@ -67,32 +40,15 @@ class AuthService {
 
       if (result.user != null) {
         AppLogger.log('Email/password sign in successful');
-        
-        // Update user data in Firestore with Stripe information if available
-        if (stripeConnectId != null || stripeCustomerId != null) {
-          await _updateUserStripeInfo(
-            result.user!.uid,
-            stripeConnectId: stripeConnectId,
-            stripeCustomerId: stripeCustomerId,
-            stripeAccountStatus: stripeAccountStatus,
-          );
-        }
-        
         await _initializeUserSession(result.user!);
         return AuthResult.success();
       } else {
-        // Clear API token if Firebase auth fails
-        _apiService.clearAuthToken();
         return AuthResult.error('Authentication failed');
       }
     } on FirebaseAuthException catch (e) {
-      // Clear API token if Firebase auth fails
-      _apiService.clearAuthToken();
       AppLogger.log('Firebase auth error: ${e.code} - ${e.message}');
       return AuthResult.error(_getFirebaseAuthErrorMessage(e));
     } catch (e) {
-      // Clear API token on any error
-      _apiService.clearAuthToken();
       AppLogger.log('Sign in error: $e');
       return AuthResult.error(
         'An unexpected error occurred. Please try again.',
@@ -123,66 +79,39 @@ class AuthService {
 
       if (result.user != null) {
         try {
-          // Register with backend API
-          final apiResponse = await _apiService.register(
-            email: email.trim().toLowerCase(),
-            password: password,
-            firstName: firstName,
-            lastName: lastName,
+          // Create user model
+          final userModel = UserModel(
+            userId: result.user!.uid,
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
             country: country,
-            mobile: mobile,
+            emailAddress: email.trim().toLowerCase(),
+            mobile: mobile.trim(),
+            password: '', // Don't store password in Firestore
             accountType: accountType,
-            companyName: companyName,
-            representativeFirstName: representativeFirstName,
-            representativeLastName: representativeLastName,
+            companyName: companyName?.trim(),
+            representativeFirstName: representativeFirstName?.trim(),
+            representativeLastName: representativeLastName?.trim(),
+            walletBalances: {},
+            address: null,
+            state: null,
+            city: null,
+            zipCode: null,
+            profilePhoto: null,
+            isSubscribed: false,
+            subscriptionStatus: 'none',
           );
 
-          if (apiResponse.isSuccess) {
-            // Set JWT token for future API calls
-            final token = apiResponse.data?['token'];
-            if (token != null) {
-              _apiService.setAuthToken(token);
-              AppLogger.log('Backend registration successful, JWT token set');
-            }
+          // Save user details to Firestore
+          await _saveUserToFirestore(userModel);
 
-            // Create user model
-            final userModel = UserModel(
-              userId: result.user!.uid,
-              firstName: firstName.trim(),
-              lastName: lastName.trim(),
-              country: country,
-              emailAddress: email.trim().toLowerCase(),
-              mobile: mobile.trim(),
-              password: '', // Don't store password in Firestore
-              accountType: accountType,
-              companyName: companyName?.trim(),
-              representativeFirstName: representativeFirstName?.trim(),
-              representativeLastName: representativeLastName?.trim(),
-              walletBalances: {},
-              address: null,
-              state: null,
-              city: null,
-              zipCode: null,
-              profilePhoto: null,
-              isSubscribed: false,
-              subscriptionStatus: 'none',
-            );
-
-            // Save user details to Firestore
-            await _saveUserToFirestore(userModel);
-
-            AppLogger.log('Email/password sign up successful');
-            await _initializeUserSession(result.user!);
-            return AuthResult.success();
-          } else {
-            // Backend registration failed, clean up Firebase user
-            await result.user!.delete();
-            return AuthResult.error(apiResponse.error ?? 'Backend registration failed');
-          }
+          AppLogger.log('Email/password sign up successful');
+          await _initializeUserSession(result.user!);
+          return AuthResult.success();
         } catch (e) {
-          // Backend registration failed, clean up Firebase user
+          // Firestore save failed, clean up Firebase user
           await result.user!.delete();
-          AppLogger.log('Backend registration error: $e');
+          AppLogger.log('Firestore save error: $e');
           return AuthResult.error('Registration failed. Please try again.');
         }
       } else {
@@ -271,9 +200,6 @@ class AuthService {
   Future<void> signOut() async {
     try {
       AppLogger.log('Signing out user');
-
-      // Clear API token
-      _apiService.clearAuthToken();
 
       // Sign out from Google if signed in
       if (await _googleSignIn.isSignedIn()) {
@@ -382,6 +308,8 @@ class AuthService {
   /// Save user to Firestore
   Future<void> _saveUserToFirestore(UserModel user) async {
     try {
+      AppLogger.log('Starting to save user to Firestore: ${user.userId}');
+      
       // Create Sila account for the user
       String? silaAccountId;
       String? silaWalletId;
@@ -407,6 +335,39 @@ class AuthService {
         // User can create Sila account later when needed
       }
 
+      // Create Stripe Connect account for the user
+      String? stripeConnectId;
+      String? stripeCustomerId;
+      String? stripeAccountStatus;
+      try {
+        AppLogger.log('Creating Stripe Connect account for user: ${user.emailAddress}');
+        
+        final stripeResult = await _stripeService.createConnectAccount(
+          userId: user.userId,
+          email: user.emailAddress,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          accountType: 'individual', // Default to individual account type
+        );
+        
+        if (stripeResult.isSuccess) {
+          stripeConnectId = stripeResult.accountId;
+          stripeCustomerId = stripeResult.customerId;
+          stripeAccountStatus = stripeResult.accountStatus;
+          
+          AppLogger.log('Stripe Connect account created successfully: $stripeConnectId');
+          AppLogger.log('Stripe Customer ID: $stripeCustomerId');
+        } else {
+          AppLogger.log('Warning: Failed to create Stripe Connect account: ${stripeResult.error}');
+          stripeAccountStatus = 'failed';
+        }
+      } catch (e) {
+        AppLogger.log('Error creating Stripe Connect account: $e');
+        stripeAccountStatus = 'failed';
+        // Continue with user creation even if Stripe account fails
+        // User can create Stripe account later when needed
+      }
+
       // Add Sila account and wallet IDs to user data
       final userData = user.toMap();
       if (silaAccountId != null) {
@@ -419,15 +380,27 @@ class AuthService {
       }
       userData['silaAccountCreatedAt'] = FieldValue.serverTimestamp();
 
-      await _batchService.addWrite(
-        collection: 'users',
-        documentId: user.userId,
-        data: userData,
-      );
-      await _batchService.flushBatch();
-      AppLogger.log('User saved to Firestore: ${user.userId}');
+      // Add Stripe account information to user data
+      if (stripeConnectId != null) {
+        userData['stripeConnectId'] = stripeConnectId;
+      }
+      if (stripeCustomerId != null) {
+        userData['stripeCustomerId'] = stripeCustomerId;
+      }
+      if (stripeAccountStatus != null) {
+        userData['stripeAccountStatus'] = stripeAccountStatus;
+      }
+      userData['stripeAccountCreatedAt'] = FieldValue.serverTimestamp();
+
+      AppLogger.log('Attempting to write user data to Firestore...');
+      
+      // Use direct Firestore write instead of batch service for debugging
+      await _firestore.collection('users').doc(user.userId).set(userData);
+      
+      AppLogger.log('User saved to Firestore successfully: ${user.userId}');
     } catch (e) {
       AppLogger.log('Error saving user to Firestore: $e');
+      AppLogger.log('Error details: ${e.toString()}');
       throw e;
     }
   }

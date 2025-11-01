@@ -156,6 +156,14 @@ func main() {
 		payments.GET("/history", GetTransactionHistory)
 	}
 
+	// Pending transfers management routes (requires authentication)
+	pendingTransfers := r.Group("/pending-transfers")
+	pendingTransfers.Use(AuthMiddleware()) // Ensure user is authenticated
+	{
+		pendingTransfers.GET("/", GetPendingTransfers)           // Admin: Get all pending transfers
+		pendingTransfers.GET("/by-email", GetPendingTransfersByEmail) // Get pending transfers by email
+	}
+
 	// Webhook routes
 	webhooks := r.Group("/webhooks")
 	{

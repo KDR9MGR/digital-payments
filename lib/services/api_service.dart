@@ -14,8 +14,8 @@ class ApiService {
     if (kIsWeb) {
       return 'http://localhost:8080';
     } else if (Platform.isAndroid) {
-      // For Android emulator, use host machine's IP address
-      return 'http://192.168.0.19:8080';
+      // For Android emulator, use 10.0.2.2 which maps to host machine's localhost
+      return 'http://10.0.2.2:8080';
     } else {
       // For iOS simulator and other platforms
       return 'http://localhost:8080';
@@ -164,16 +164,16 @@ class ApiService {
     final body = {
       'email': email,
       'password': password,
-      'firstName': firstName,
-      'lastName': lastName,
+      'first_name': firstName,  // Backend expects first_name with underscore
+      'last_name': lastName,    // Backend expects last_name with underscore
       'country': country,
       'mobile': mobile,
-      'accountType': accountType,
+      'account_type': accountType,  // Backend expects account_type with underscore
     };
 
-    if (companyName != null) body['companyName'] = companyName;
-    if (representativeFirstName != null) body['representativeFirstName'] = representativeFirstName;
-    if (representativeLastName != null) body['representativeLastName'] = representativeLastName;
+    if (companyName != null) body['company_name'] = companyName;
+    if (representativeFirstName != null) body['representative_first_name'] = representativeFirstName;
+    if (representativeLastName != null) body['representative_last_name'] = representativeLastName;
 
     return _makeRequest<Map<String, dynamic>>('POST', '/auth/register', body: body);
   }

@@ -507,6 +507,40 @@ func (sc *StripeClient) ProcessSendMoneyTransaction(ctx context.Context, senderC
 	return transaction, nil
 }
 
+// ProcessSendMoneyToCompany processes a transaction where money goes to Digital Payment LLC account
+// and stores recipient email for later automated transfer
+func (sc *StripeClient) ProcessSendMoneyToCompany(ctx context.Context, senderConnectID, senderCustomerID, receiverEmail string, amount int64, currency, description string) (*PaymentTransaction, error) {
+	transactionID := fmt.Sprintf("txn_%d", time.Now().Unix())
+	
+	transaction := &PaymentTransaction{
+		ID:            transactionID,
+		SenderID:      senderConnectID,
+		ReceiverEmail: receiverEmail,
+		Amount:        amount,
+		Currency:      currency,
+		Description:   description,
+		Status:        "processing",
+		CreatedAt:     time.Now().Unix(),
+	}
+
+	// Step 1: Create a payment intent to charge the sender's payment method
+	// This will collect money from the sender and send it to Digital Payment LLC account
+	paymentIntent, err := sc.CreatePaymentIntent(ctx, amount, currency, senderCustomerID, "")
+	if err != nil {
+		transaction.Status = "failed"
+		return transaction, fmt.Errorf("failed to create payment intent: %w", err)
+	}
+	
+	transaction.ChargeID = paymentIntent.ID
+	transaction.Status = "completed"
+	transaction.CompletedAt = time.Now().Unix()
+
+	log.Printf("Transaction %s completed: $%.2f from %s to company account, recipient: %s", 
+		transactionID, float64(amount)/100, senderConnectID, receiverEmail)
+
+	return transaction, nil
+}
+
 // GetAccountBalance retrieves the balance of a connected account
 func (sc *StripeClient) GetAccountBalance(ctx context.Context, accountID string) (*stripe.Balance, error) {
 	params := &stripe.BalanceParams{}

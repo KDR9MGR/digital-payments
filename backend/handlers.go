@@ -28,10 +28,27 @@ type User struct {
 	CreatedAt            time.Time `json:"created_at"`
 }
 
-// Simple in-memory user store (in production, use a proper database)
+// PendingTransfer represents a transfer waiting to be processed to the recipient
+type PendingTransfer struct {
+	ID            string    `json:"id"`
+	SenderEmail   string    `json:"sender_email"`
+	ReceiverEmail string    `json:"receiver_email"`
+	Amount        float64   `json:"amount"`
+	Currency      string    `json:"currency"`
+	Description   string    `json:"description"`
+	TransactionID string    `json:"transaction_id"`
+	Status        string    `json:"status"` // pending, processed, failed
+	CreatedAt     time.Time `json:"created_at"`
+	ProcessedAt   time.Time `json:"processed_at,omitempty"`
+}
+
+// Simple in-memory stores (in production, use a proper database)
 var (
 	userStore = make(map[string]*User)
 	userMutex = sync.RWMutex{}
+	
+	pendingTransferStore = make(map[string]*PendingTransfer)
+	pendingTransferMutex = sync.RWMutex{}
 )
 
 // Initialize with a test user
@@ -355,62 +372,74 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Get Stripe client from context
-	stripeClientInterface, exists := c.Get("stripeClient")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Stripe service unavailable"})
-		return
-	}
-	stripeClient := stripeClientInterface.(*StripeClient)
-
-	ctx := context.Background()
-
-	// Create Stripe customer
-	stripeCustomer, err := stripeClient.CreateCustomer(ctx, user.Email, user.FirstName+" "+user.LastName, user.ID)
-	if err != nil {
-		log.Printf("Failed to create Stripe customer for user %s: %v", user.ID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment account"})
-		return
-	}
-
-	// Create Stripe Connect account
-	stripeConnectAccount, err := stripeClient.CreateConnectAccount(ctx, user.Email, user.ID, registerRequest.AccountType)
-	if err != nil {
-		log.Printf("Failed to create Stripe Connect account for user %s: %v", user.ID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create merchant account"})
-		return
-	}
-
-	// Update user with Stripe information
-	userMutex.Lock()
-	user.StripeCustomerID = stripeCustomer.ID
-	user.StripeConnectID = stripeConnectAccount.ID
-	user.StripeAccountStatus = "pending_verification"
-	userStore[user.Email] = user
-	userMutex.Unlock()
-
-	// Generate JWT token
+	// Get Stripe client from context (optional for development)
+	stripeClientInterface, stripeExists := c.Get("stripeClient")
+	
+	// Generate JWT token first (required for all registrations)
 	token, err := GenerateJWT(user.ID, user.Email, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	// Log successful registration
-	stripeClient.LogAPIInteraction(ctx, "user_registration", user.ID, true, 
-		fmt.Sprintf("Created customer %s and connect account %s", stripeCustomer.ID, stripeConnectAccount.ID))
+	// If Stripe is available, create customer and connect account
+	if stripeExists {
+		stripeClient := stripeClientInterface.(*StripeClient)
+		ctx := context.Background()
 
-	c.JSON(http.StatusCreated, gin.H{
-		"token":                 token,
-		"userID":                user.ID,
-		"email":                 user.Email,
-		"firstName":             user.FirstName,
-		"lastName":              user.LastName,
-		"stripeCustomerID":      user.StripeCustomerID,
-		"stripeConnectID":       user.StripeConnectID,
-		"stripeAccountStatus":   user.StripeAccountStatus,
-		"accountType":           registerRequest.AccountType,
-	})
+		// Create Stripe customer
+		stripeCustomer, err := stripeClient.CreateCustomer(ctx, user.Email, user.FirstName+" "+user.LastName, user.ID)
+		if err != nil {
+			log.Printf("Failed to create Stripe customer for user %s: %v", user.ID, err)
+			// Don't fail registration, just log the error and continue without Stripe
+			log.Printf("Continuing registration without Stripe integration for user %s", user.ID)
+		} else {
+			// Create Stripe Connect account
+			stripeConnectAccount, err := stripeClient.CreateConnectAccount(ctx, user.Email, user.ID, registerRequest.AccountType)
+			if err != nil {
+				log.Printf("Failed to create Stripe Connect account for user %s: %v", user.ID, err)
+				// Don't fail registration, just log the error and continue without Stripe
+				log.Printf("Continuing registration without Stripe Connect for user %s", user.ID)
+			} else {
+				// Update user with Stripe information
+				userMutex.Lock()
+				user.StripeCustomerID = stripeCustomer.ID
+				user.StripeConnectID = stripeConnectAccount.ID
+				user.StripeAccountStatus = "pending_verification"
+				userStore[user.Email] = user
+				userMutex.Unlock()
+
+				// Log successful Stripe integration
+				stripeClient.LogAPIInteraction(ctx, "user_registration", user.ID, true, 
+					fmt.Sprintf("Created customer %s and connect account %s", stripeCustomer.ID, stripeConnectAccount.ID))
+			}
+		}
+	} else {
+		log.Printf("Stripe client not available, registering user %s without payment integration", user.ID)
+	}
+
+	// Return successful registration response
+	response := gin.H{
+		"token":       token,
+		"userID":      user.ID,
+		"email":       user.Email,
+		"firstName":   user.FirstName,
+		"lastName":    user.LastName,
+		"accountType": registerRequest.AccountType,
+	}
+
+	// Add Stripe information if available
+	if user.StripeCustomerID != "" {
+		response["stripeCustomerID"] = user.StripeCustomerID
+	}
+	if user.StripeConnectID != "" {
+		response["stripeConnectID"] = user.StripeConnectID
+	}
+	if user.StripeAccountStatus != "" {
+		response["stripeAccountStatus"] = user.StripeAccountStatus
+	}
+
+	c.JSON(http.StatusCreated, response)
 }
 
 // CreateLinkToken creates a Plaid Link token for bank account connection
@@ -1357,26 +1386,9 @@ func SendMoney(c *gin.Context) {
 		return
 	}
 
-	// Get receiver user
-	userMutex.RLock()
-	receiver, exists := userStore[request.ReceiverEmail]
-	userMutex.RUnlock()
-
-	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Receiver not found",
-			"details": "The recipient email address is not registered in our system",
-		})
-		return
-	}
-
-	if receiver.StripeConnectID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Receiver does not have a Stripe Connect account",
-			"details": "The recipient has not completed their payment account setup",
-		})
-		return
-	}
+	// Note: We no longer require the receiver to be registered in our system
+	// The money will go to Digital Payment LLC account and recipient email will be stored
+	// for later automated transfer processing
 
 	// Convert amount to cents (validate for overflow)
 	if request.Amount > 92233720368547.75 { // Max int64 / 100
@@ -1395,11 +1407,12 @@ func SendMoney(c *gin.Context) {
 		return
 	}
 
-	// Process the send money transaction with comprehensive error handling
-	transaction, err := stripeClient.(*StripeClient).ProcessSendMoneyTransaction(
+	// Process the send money transaction to company account with comprehensive error handling
+	transaction, err := stripeClient.(*StripeClient).ProcessSendMoneyToCompany(
 		context.Background(),
 		sender.StripeConnectID,
-		receiver.StripeConnectID,
+		sender.StripeCustomerID,
+		request.ReceiverEmail,
 		amountCents,
 		request.Currency,
 		request.Description,
@@ -1437,19 +1450,81 @@ func SendMoney(c *gin.Context) {
 	// Add receiver email to response
 	transaction.ReceiverEmail = request.ReceiverEmail
 
+	// Store pending transfer for later automated processing
+	pendingTransfer := &PendingTransfer{
+		ID:            fmt.Sprintf("pt_%d", time.Now().Unix()),
+		SenderEmail:   senderEmail.(string),
+		ReceiverEmail: request.ReceiverEmail,
+		Amount:        request.Amount,
+		Currency:      request.Currency,
+		Description:   request.Description,
+		TransactionID: transaction.ID,
+		Status:        "pending",
+		CreatedAt:     time.Now(),
+	}
+
+	pendingTransferMutex.Lock()
+	pendingTransferStore[pendingTransfer.ID] = pendingTransfer
+	pendingTransferMutex.Unlock()
+
+	log.Printf("Stored pending transfer %s: $%.2f to %s", pendingTransfer.ID, request.Amount, request.ReceiverEmail)
+
 	// Success response with transaction details
 	c.JSON(http.StatusOK, gin.H{
-		"message":       "Money sent successfully",
-		"transaction":   transaction,
-		"amount":        request.Amount,
-		"currency":      request.Currency,
-		"receiver":      request.ReceiverEmail,
-		"description":   request.Description,
-		"status":        "completed",
+		"message":         "Money sent successfully",
+		"transaction":     transaction,
+		"pending_transfer": pendingTransfer,
+		"amount":          request.Amount,
+		"currency":        request.Currency,
+		"receiver":        request.ReceiverEmail,
+		"description":     request.Description,
+		"status":          "completed",
+		"note":            "Funds have been collected and recipient will be notified for automated transfer",
 	})
 }
 
 // GetTransactionHistory retrieves transaction history for a user
+// GetPendingTransfers returns all pending transfers (for admin use)
+func GetPendingTransfers(c *gin.Context) {
+	pendingTransferMutex.RLock()
+	transfers := make([]*PendingTransfer, 0, len(pendingTransferStore))
+	for _, transfer := range pendingTransferStore {
+		transfers = append(transfers, transfer)
+	}
+	pendingTransferMutex.RUnlock()
+
+	c.JSON(http.StatusOK, gin.H{
+		"pending_transfers": transfers,
+		"count":            len(transfers),
+	})
+}
+
+// GetPendingTransfersByEmail returns pending transfers for a specific email
+func GetPendingTransfersByEmail(c *gin.Context) {
+	email := c.Query("email")
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Email parameter is required",
+		})
+		return
+	}
+
+	pendingTransferMutex.RLock()
+	transfers := make([]*PendingTransfer, 0)
+	for _, transfer := range pendingTransferStore {
+		if transfer.ReceiverEmail == email || transfer.SenderEmail == email {
+			transfers = append(transfers, transfer)
+		}
+	}
+	pendingTransferMutex.RUnlock()
+
+	c.JSON(http.StatusOK, gin.H{
+		"pending_transfers": transfers,
+		"count":            len(transfers),
+		"email":            email,
+	})
+}
+
 func GetTransactionHistory(c *gin.Context) {
 	// Get user from JWT token
 	userEmail, exists := c.Get("email")

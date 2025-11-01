@@ -1,0 +1,16 @@
+displayName: "Digital Payments API Health Check"
+httpCheck:
+  path: "/health"
+  port: 443
+  useSsl: true
+monitoredResource:
+  type: "uptime_url"
+  labels:
+    project_id: "digital-payments-52cac"
+    host: "digital-payments-api-1086070277189.us-central1.run.app"
+timeout: "10s"
+period: "60s"
+selectedRegions:
+  - "USA_OREGON"
+  - "USA_IOWA"
+  - "EUROPE_IRELAND"

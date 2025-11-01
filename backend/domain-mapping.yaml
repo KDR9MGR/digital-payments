@@ -1,0 +1,8 @@
+apiVersion: domains.cloudrun.com/v1
+kind: DomainMapping
+metadata:
+  name: api.digitalpayments.com
+  namespace: digital-payments-52cac
+spec:
+  routeName: digital-payments-api
+  certificateMode: AUTOMATIC
