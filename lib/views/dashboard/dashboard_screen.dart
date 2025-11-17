@@ -499,23 +499,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                   Expanded(
                     child: _modernActionCard(
                       context,
-                      icon: Icons.account_balance_rounded,
-                      title: 'Bank Info',
-                      subtitle: 'Save bank details',
+                      icon: Icons.settings_rounded,
+                      title: 'Settings',
+                      subtitle: 'Manage account',
                       color: Colors.purple,
-                      onTap: () {
-                        final subscriptionController =
-                            Get.find<SubscriptionController>();
-                        if (subscriptionController.hasActiveSubscription) {
-                          Get.toNamed(Routes.bankInfoScreen);
-                        } else {
-                          Get.to(
-                            () => const PaywallScreen(),
-                            fullscreenDialog: true,
-                            transition: Transition.cupertino,
-                          );
-                        }
-                      },
+                      onTap: () => controller.navigateToSettingScreen(),
                     ),
                   ),
                 ],

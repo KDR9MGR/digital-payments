@@ -7,7 +7,6 @@ import '../utils/app_logger.dart';
 import '../services/firebase_batch_service.dart';
 import '../controller/subscription_controller.dart';
 import '../services/subscription_service.dart';
-import '../services/plaid_service.dart';
 import '../services/api_service.dart';
 
 class AuthService {
@@ -19,7 +18,6 @@ class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseBatchService _batchService = FirebaseBatchService();
-  final PlaidService _plaidService = PlaidService();
   final ApiService _apiService = ApiService();
 
   User? get currentUser => _auth.currentUser;

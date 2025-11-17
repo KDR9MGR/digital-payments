@@ -16,8 +16,6 @@ import 'package:xpay/views/auth/login_vm.dart';
 import 'package:xpay/views/auth/wallet_view_model.dart';
 import 'controller/auth_controller.dart';
 import 'controller/subscription_controller.dart';
-import 'controller/bank_accounts_controller.dart';
-import 'services/plaid_service.dart';
 import 'services/platform_payment_service.dart';
 import 'services/subscription_service.dart';
 
@@ -80,12 +78,11 @@ void main() async {
 
         // Initialize services first
         Get.put(SubscriptionService());
-        Get.put(PlaidService());
         
         // Initialize controllers
         Get.put(AuthController());
         Get.put(SubscriptionController());
-        Get.put(BankAccountsController());
+        
         
         // Run the app immediately
         runApp(
@@ -157,12 +154,7 @@ void _initializeServicesInBackground() {
       AppLogger.log('Platform Payment Service initialization error: $e');
     }
     
-    try {
-      await PlaidService.init().timeout(const Duration(seconds: 10));
-      AppLogger.log('Sila initialized successfully');
-    } catch (e) {
-      AppLogger.log('Sila initialization error: $e');
-    }
+    
     
     try {
       await Get.find<SubscriptionService>().initialize().timeout(const Duration(seconds: 10));

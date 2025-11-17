@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../routes/routes.dart';
-import '../services/plaid_service.dart';
 import '../services/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/app_logger.dart';
 import '../data/user_model.dart';
-import '../config/plaid_config.dart';
 import '../views/transfer_money/transaction_success_screen.dart';
 
 class TransferMoneyController extends GetxController {
@@ -33,7 +31,7 @@ class TransferMoneyController extends GetxController {
   String? senderSilaAccountId;
   String? recipientSilaAccountId;
   
-  final PlaidService _plaidService = PlaidService();
+  
 
   double calculateCharge(double value) {
     fixedCharge.value = 2.00;
@@ -365,23 +363,8 @@ class TransferMoneyController extends GetxController {
         Map<String, dynamic>? recipientData = await _findRecipientByEmail(recipientEmail);
         if (recipientData == null) {
           AppLogger.log('Recipient not found in Firestore: $recipientEmail');
-          if (PlaidConfig.testMode) {
-            AppLogger.log('Test mode enabled - creating synthetic recipient');
-            // Create a synthetic recipient for test mode
-            final localPart = recipientEmail.contains('@') ? recipientEmail.split('@').first : 'Test';
-            final testRecipientId = 'test_recipient_${recipientEmail.hashCode.abs()}';
-            recipientData = {
-              'userId': testRecipientId,
-              'email': recipientEmail,
-              'firstName': localPart.isNotEmpty ? localPart : 'Test',
-              'lastName': 'User',
-              'phone': '',
-            };
-            AppLogger.log('Test mode: Using synthetic recipient $recipientEmail with ID $testRecipientId');
-          } else {
-            AppLogger.log('ERROR: Recipient not found and not in test mode');
-            return {'success': false, 'error': 'Recipient not found'};
-          }
+          AppLogger.log('ERROR: Recipient not found');
+          return {'success': false, 'error': 'Recipient not found'};
         }
 
         AppLogger.log('Recipient ready: ${recipientData['email']} (${recipientData['userId']})');
@@ -397,7 +380,7 @@ class TransferMoneyController extends GetxController {
         }
 
         // Ensure currency is uppercase and supported (fallback to USD in test mode)
-        final normalizedCurrency = ['USD', 'GBP', 'BDT'].contains(currency.toUpperCase()) ? currency.toUpperCase() : (PlaidConfig.testMode ? 'USD' : currency.toUpperCase());
+        final normalizedCurrency = ['USD', 'GBP', 'BDT'].contains(currency.toUpperCase()) ? currency.toUpperCase() : 'USD';
         AppLogger.log('Normalized currency: $normalizedCurrency');
 
         // TODO: Implement P2P transfer logic with appropriate payment service

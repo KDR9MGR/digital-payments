@@ -4,8 +4,7 @@ import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:xpay/routes/routes.dart';
 
-import '../../controller/bank_accounts_controller.dart';
-import '../../data/bank_account_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/qr_generation_service.dart';
 import '../../utils/custom_color.dart';
 import '../../utils/custom_style.dart';
@@ -20,7 +19,6 @@ class MyQrCodeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bankController = Get.find<BankAccountsController>();
     final qrService = QrGenerationService.instance;
     return Scaffold(
       backgroundColor: CustomColor.screenBGColor,
@@ -52,171 +50,38 @@ class MyQrCodeScreen extends StatelessWidget {
         child: SizedBox(
           height: MediaQuery.of(context).size.height,
           width: MediaQuery.of(context).size.width,
-          child: Obx(() => _bodyWidget(context, bankController, qrService)),
+          child: _bodyWidget(context, qrService),
         ),
       ),
     );
   }
 
   // body widget contain all the widgets
-  Widget _bodyWidget(BuildContext context, BankAccountsController bankController, QrGenerationService qrService) {
-    if (bankController.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (bankController.bankAccounts.isEmpty) {
-      return _noBankAccountsWidget(context, bankController);
-    }
-
+  Widget _bodyWidget(BuildContext context, QrGenerationService qrService) {
     return SingleChildScrollView(
       padding: EdgeInsets.all(Dimensions.marginSize),
       child: Column(
         children: [
-          _bankAccountSelectorWidget(context, bankController),
+          _qrCodeDisplayWidget(context, qrService),
           SizedBox(height: Dimensions.heightSize * 2),
-          _qrCodeDisplayWidget(context, bankController, qrService),
+          _qrCodeDisplayWidget(context, qrService),
           SizedBox(height: Dimensions.heightSize * 2),
-          _actionButtonsWidget(context, bankController),
+          _actionButtonsWidget(context),
         ],
       ),
     );
   }
 
   // Widget for when no bank accounts are available
-  Widget _noBankAccountsWidget(BuildContext context, BankAccountsController bankController) {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(Dimensions.marginSize),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.account_balance,
-              size: 80,
-              color: Colors.white.withValues(alpha: 0.5),
-            ),
-            SizedBox(height: Dimensions.heightSize * 2),
-            Text(
-              'No Bank Accounts Found',
-              style: CustomStyle.commonTextTitleWhite,
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: Dimensions.heightSize),
-            Text(
-              'Add a bank account to generate QR codes for payments',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: Dimensions.mediumTextSize,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: Dimensions.heightSize * 3),
-            PrimaryButton(
-              title: 'Add Bank Account',
-              onPressed: () {
-                Get.toNamed(Routes.bankInfoScreen);
-              },
-              borderColorName: CustomColor.secondaryColor,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  
 
   // Bank account selector widget
-  Widget _bankAccountSelectorWidget(BuildContext context, BankAccountsController bankController) {
-    return Container(
-      padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
-      decoration: BoxDecoration(
-        color: CustomColor.secondaryColor,
-        borderRadius: BorderRadius.circular(Dimensions.radius),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Select Bank Account',
-            style: CustomStyle.commonTextTitleWhite,
-          ),
-          SizedBox(height: Dimensions.heightSize),
-          DropdownButtonFormField<BankAccountModel>(
-            initialValue: bankController.selectedBankAccount,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: CustomColor.primaryColor.withValues(alpha: 0.1),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(Dimensions.radius * 0.5),
-                borderSide: BorderSide.none,
-              ),
-            ),
-            dropdownColor: CustomColor.primaryColor,
-            style: TextStyle(color: Colors.white),
-            items: bankController.bankAccounts.map((account) {
-              return DropdownMenuItem<BankAccountModel>(
-                value: account,
-                child: Text(
-                  '${account.bankName} - ${account.maskedAccountNumber}',
-                  style: TextStyle(color: Colors.white),
-                ),
-              );
-            }).toList(),
-            onChanged: (BankAccountModel? account) {
-              if (account != null) {
-                bankController.setSelectedAccount(account);
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  
 
   // QR code display widget
-  Widget _qrCodeDisplayWidget(BuildContext context, BankAccountsController bankController, QrGenerationService qrService) {
-    final selectedAccount = bankController.selectedBankAccount;
-    
-    if (selectedAccount == null) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: CustomColor.secondaryColor,
-          borderRadius: BorderRadius.circular(Dimensions.radius),
-        ),
-        child: Center(
-          child: Text(
-            'Select a bank account to generate QR code',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: Dimensions.mediumTextSize,
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (!qrService.canGenerateQr(selectedAccount)) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: CustomColor.secondaryColor,
-          borderRadius: BorderRadius.circular(Dimensions.radius),
-        ),
-        child: Center(
-          child: Text(
-            'Selected account has incomplete information',
-            style: TextStyle(
-              color: Colors.red.withValues(alpha: 0.7),
-              fontSize: Dimensions.mediumTextSize,
-            ),
-          ),
-        ),
-      );
-    }
-
-    final qrData = qrService.generateQrData(selectedAccount);
+  Widget _qrCodeDisplayWidget(BuildContext context, QrGenerationService qrService) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final qrData = qrService.generateUserQrData(uid);
     
     return Container(
       padding: EdgeInsets.all(Dimensions.defaultPaddingSize),
@@ -246,7 +111,7 @@ class MyQrCodeScreen extends StatelessWidget {
           ),
           SizedBox(height: Dimensions.heightSize),
           Text(
-            qrService.getQrDisplayText(selectedAccount),
+            qrService.getUserQrDisplayText(uid),
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.8),
               fontSize: Dimensions.smallTextSize,
@@ -259,29 +124,21 @@ class MyQrCodeScreen extends StatelessWidget {
   }
 
   // Action buttons widget
-  Widget _actionButtonsWidget(BuildContext context, BankAccountsController bankController) {
+  Widget _actionButtonsWidget(BuildContext context) {
     return Column(
       children: [
         PrimaryButton(
           title: 'Copy QR Data',
           onPressed: () {
-            final selectedAccount = bankController.selectedBankAccount;
-            if (selectedAccount != null) {
-              final qrData = QrGenerationService.instance.generateQrData(selectedAccount);
-              Clipboard.setData(ClipboardData(text: qrData));
-              Get.snackbar('Success', 'QR data copied to clipboard');
-            }
+            final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+            final qrData = QrGenerationService.instance.generateUserQrData(uid);
+            Clipboard.setData(ClipboardData(text: qrData));
+            Get.snackbar('Success', 'QR data copied to clipboard');
           },
           borderColorName: CustomColor.primaryColor,
         ),
         SizedBox(height: Dimensions.heightSize),
-        PrimaryButton(
-          title: 'Manage Bank Accounts',
-          onPressed: () {
-            Get.toNamed(Routes.bankInfoScreen);
-          },
-          borderColorName: CustomColor.secondaryColor,
-        ),
+        
       ],
     );
   }

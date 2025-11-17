@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:xpay/controller/settings_controller.dart';
 import 'package:xpay/controller/cards_controller.dart';
-import 'package:xpay/controller/bank_accounts_controller.dart';
 import 'package:xpay/data/user_model.dart';
 import 'package:xpay/utils/threading_utils.dart';
 import 'package:xpay/services/firebase_batch_service.dart';
@@ -115,13 +114,9 @@ class UserProvider with ChangeNotifier {
     try {
       // Get controllers and load their data
       final cardsController = Get.find<CardsController>();
-      final bankAccountsController = Get.find<BankAccountsController>();
 
       // Load cards and bank accounts from server
-      await Future.wait([
-        cardsController.loadCards(),
-        bankAccountsController.loadBankAccounts(),
-      ]);
+      await cardsController.loadCards();
 
       AppLogger.log('Loaded user payment data (cards and bank accounts)');
     } catch (e) {

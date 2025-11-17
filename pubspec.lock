@@ -981,14 +981,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.4.0"
-  plaid_flutter:
-    dependency: "direct main"
-    description:
-      name: plaid_flutter
-      sha256: "396e365d21f07375bde5b2309cf84aee4c0995aa900e6a05fde4c370dacd255a"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.2.0"
   platform:
     dependency: transitive
     description:

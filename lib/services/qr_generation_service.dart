@@ -66,4 +66,19 @@ class QrGenerationService {
            'Routing: ${bankAccount.routingNumber}\n'
            'Type: ${bankAccount.accountType}';
   }
+
+  String generateUserQrData(String uid) {
+    final qrData = {
+      'type': 'user_payment',
+      'version': '1.0',
+      'user_id': uid,
+      'timestamp': DateTime.now().toIso8601String(),
+      'app': 'XPay',
+    };
+    return json.encode(qrData);
+  }
+
+  String getUserQrDisplayText(String uid) {
+    return 'User ID: $uid';
+  }
 }

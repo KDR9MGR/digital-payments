@@ -7,7 +7,6 @@ import '../../data/user_model.dart';
 import '../../utils/threading_utils.dart';
 import '../../utils/crash_prevention.dart';
 import '../../utils/app_logger.dart';
-import '../../services/plaid_service.dart';
 import '../../services/firebase_batch_service.dart';
 import '../../services/firebase_query_optimizer.dart';
 import '../../services/firebase_cache_service.dart';
@@ -314,8 +313,7 @@ class WalletViewModel extends BaseViewModel {
     }
 
     try {
-      // Validate that P2P transactions use Plaid integration
-      await _validatePlaidP2PIntegration();
+      
 
       await ThreadingUtils.runFirebaseOperation(() async {
         User? senderUser = FirebaseAuth.instance.currentUser;
@@ -718,166 +716,5 @@ class WalletViewModel extends BaseViewModel {
     }
   }
 
-  // Validate that P2P transactions use Plaid integration
-  Future<void> _validatePlaidP2PIntegration() async {
-    try {
-      // Validate that we have proper Plaid configuration
-      // This ensures that all P2P transfers go through Plaid's secure payment infrastructure
-      AppLogger.log(
-        'Validating Plaid P2P integration...',
-        tag: 'WalletViewModel',
-      );
-
-      // The validation passes - P2P transfers will now use Plaid integration
-      AppLogger.log(
-        'Plaid P2P integration validated successfully',
-        tag: 'WalletViewModel',
-      );
-    } catch (e) {
-      AppLogger.error('P2P Plaid validation failed: $e', tag: 'WalletViewModel');
-      throw 'P2P transactions require Plaid integration for security and compliance. Please ensure Plaid service is properly configured.';
-    }
-  }
-
-  // New Plaid-integrated P2P transfer method
-  Future<void> sendMoneyToUserWithPlaid(
-    String recipientEmail,
-    double amount,
-    String currency,
-  ) async {
-    if (!_isValid) return;
-
-    if (kDebugMode) {
-      AppLogger.info(
-        'WalletViewModel.sendMoneyToUserWithPlaid: recipientEmail: $recipientEmail',
-        tag: 'WalletViewModel',
-      );
-    }
-
-    try {
-      await ThreadingUtils.runFirebaseOperation(() async {
-        User? senderUser = FirebaseAuth.instance.currentUser;
-        if (senderUser == null) {
-          throw 'No authenticated user found';
-        }
-
-        // Fetch sender's details
-        DocumentSnapshot senderSnapshot =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(senderUser.uid)
-                .get();
-        if (!senderSnapshot.exists || senderSnapshot.data() == null) {
-          throw 'Sender data not found';
-        }
-
-        final senderData = senderSnapshot.data() as Map<String, dynamic>;
-        UserModel sender = UserModel.fromMap(senderData);
-
-        // Fetch recipient's details by email
-        QuerySnapshot recipientQuery =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .where('email_address', isEqualTo: recipientEmail)
-                .get();
-        if (recipientQuery.docs.isEmpty) {
-          throw 'Recipient with email $recipientEmail not found';
-        }
-
-        final recipientData =
-            recipientQuery.docs.first.data() as Map<String, dynamic>;
-        UserModel recipient = UserModel.fromMap(recipientData);
-
-        // Initialize Plaid service
-        final plaidService = PlaidService();
-
-        // Set account IDs for both users (simplified)
-        final senderPlaidAccountId = sender.userId;
-        final recipientPlaidAccountId = recipient.userId;
-
-        if (senderPlaidAccountId.isEmpty || recipientPlaidAccountId.isEmpty) {
-          throw 'Failed to get account IDs for transfer';
-        }
-
-        // Simulate P2P transfer (TODO: implement actual transfer logic)
-        final transferResult = {
-          'success': true,
-          'transferId': 'mock_transfer_${DateTime.now().millisecondsSinceEpoch}',
-          'amount': amount,
-          'currency': currency,
-        };
-
-        if (transferResult['success'] != true) {
-          throw transferResult['error'] ?? 'Transfer failed';
-        }
-
-        // Record transaction in Firebase for tracking
-        final transferId = transferResult['transferId'] as String?;
-
-        // Generate transaction IDs without calling Firestore
-        final senderTransactionId =
-            transferId ??
-            (DateTime.now().millisecondsSinceEpoch.toString() +
-                '_' +
-                sender.userId.substring(0, 8) +
-                '_send');
-        final recipientTransactionId =
-            DateTime.now().millisecondsSinceEpoch.toString() +
-            '_' +
-            recipient.userId.substring(0, 8) +
-            '_receive';
-
-        // Record transaction for sender using batch service
-        TransactionModel senderTransaction = TransactionModel(
-          transactionId: senderTransactionId,
-          userId: sender.userId,
-          amount: amount,
-          timestamp: DateTime.now(),
-          type: 'send_plaid',
-          currency: currency,
-        );
-        await _batchService.addWrite(
-          collection: 'transactions',
-          documentId: senderTransaction.transactionId,
-          data: senderTransaction.toMap(),
-        );
-
-        // Record transaction for recipient using batch service
-        TransactionModel recipientTransaction = TransactionModel(
-          transactionId: recipientTransactionId,
-          userId: recipient.userId,
-          amount: amount,
-          timestamp: DateTime.now(),
-          type: 'receive_plaid',
-          currency: currency,
-        );
-        await _batchService.addWrite(
-          collection: 'transactions',
-          documentId: recipientTransaction.transactionId,
-          data: recipientTransaction.toMap(),
-        );
-
-        // Flush batch to commit all transactions
-        await _batchService.flushBatch();
-
-        AppLogger.log(
-          'Plaid P2P transfer completed successfully: $transferId',
-          tag: 'WalletViewModel',
-        );
-      }, operationName: 'Send money via Plaid');
-
-      // Notify listeners on main thread
-      await ThreadingUtils.runUIOperation(() async {
-        notifyListeners();
-      });
-    } catch (e) {
-      if (kDebugMode) {
-        AppLogger.error(
-          'WalletViewModel.sendMoneyToUserWithPlaid error: $e',
-          tag: 'WalletViewModel',
-        );
-      }
-      rethrow;
-    }
-  }
+  
 }

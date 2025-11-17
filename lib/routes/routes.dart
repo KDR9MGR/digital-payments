@@ -6,7 +6,6 @@ import 'package:xpay/views/auth/login_screen.dart';
 import 'package:xpay/views/auth/otp_screen.dart';
 import 'package:xpay/views/auth/reset_password_screen.dart';
 import 'package:xpay/views/auth/sign_up_screen.dart';
-import 'package:xpay/views/bank_info/bank_info_screen.dart';
 import 'package:xpay/views/my_cards/add_new_card_screen.dart';
 import 'package:xpay/views/my_cards/my_cards_screen.dart';
 import 'package:xpay/views/navigation_screen.dart';
@@ -262,7 +261,6 @@ class Routes {
   static const String changeLanguageScreen = '/changeLanguageScreen';
   static const String myCardsScreen = '/myCardsScreen';
   static const String addNewCardScreen = '/addNewCardScreen';
-  static const String bankInfoScreen = '/bankInfoScreen';
   static const String stripeOnboardingScreen = '/stripeOnboardingScreen';
   static const String sendMoneySimpleScreen = '/sendMoneySimpleScreen';
 
@@ -395,7 +393,6 @@ class Routes {
     GetPage(name: changeLanguageScreen, page: () => ChangeLanguageScreen()),
     GetPage(name: myCardsScreen, page: () => const MyCardsScreen()),
     GetPage(name: addNewCardScreen, page: () => AddNewCardScreen()),
-    GetPage(name: bankInfoScreen, page: () => const BankInfoScreen()),
     GetPage(
       name: stripeOnboardingScreen,
       page: () => stripe_onboarding.OnboardingScreen(baseUrl: _detectBaseUrl()),

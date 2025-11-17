@@ -85,7 +85,6 @@ dependencies:
   # Google Sign-In for authentication
   google_sign_in: ^6.2.1
   # Plaid Link SDK for bank account connection
-  plaid_flutter: ^4.0.0
   flutter_stripe: ^10.0.0
 
 dependency_overrides:

@@ -20,22 +20,7 @@ func main() {
 		log.Println("No .env file found, using system environment variables")
 	}
 
-	// Initialize Plaid client
-	plaidClient, err := NewPlaidClient()
-	if err != nil {
-		log.Printf("Failed to initialize Plaid client: %v", err)
-		// Continue without Plaid client - endpoints will return service unavailable
-	}
-
-	// Test Plaid connection if client is available
-	if plaidClient != nil {
-		ctx := context.Background()
-		if err := plaidClient.TestConnection(ctx); err != nil {
-			log.Printf("Plaid connection test failed: %v", err)
-		} else {
-			log.Println("Plaid connection test successful")
-		}
-	}
+    
 
     // Initialize Stripe client
     stripeClient, err := NewStripeClient()
@@ -95,9 +80,6 @@ func main() {
 
     // Middleware to inject clients into context
     r.Use(func(c *gin.Context) {
-        if plaidClient != nil {
-            c.Set("plaidClient", plaidClient)
-        }
         if stripeClient != nil {
             c.Set("stripeClient", stripeClient)
         }
@@ -123,37 +105,7 @@ func main() {
     // Apply auth middleware to protected routes (can be refined per-group)
     r.Use(AuthMiddleware())
 
-	// Plaid Link routes
-	plaidLink := r.Group("/plaid")
-	{
-		plaidLink.POST("/link-token", CreateLinkToken(plaidClient))
-		plaidLink.POST("/exchange-token", ExchangePublicToken(plaidClient))
-	}
-
-	// Account management routes
-	accounts := r.Group("/accounts")
-	{
-		accounts.POST("/", CreateAccount(plaidClient))
-		accounts.GET("/:userID", GetAccount(plaidClient))
-		accounts.PUT("/:userID", UpdateAccount(plaidClient))
-		accounts.GET("/:userID/auth", GetAuthData(plaidClient))
-	}
-
-	// Payment methods routes (bank accounts via Plaid)
-	paymentMethods := r.Group("/payment-methods")
-	{
-		paymentMethods.GET("/:userID", GetPaymentMethods(plaidClient))
-		paymentMethods.POST("/:userID/verify", VerifyPaymentMethod(plaidClient))
-	}
-
-	// Transfer routes (Legacy - using existing handlers)
-	transfers := r.Group("/transfers")
-	{
-		transfers.POST("/", CreateTransfer(plaidClient))
-		transfers.POST("/p2p", CreateP2PTransfer(plaidClient))
-		transfers.GET("/:transferID", GetTransfer(plaidClient))
-		transfers.GET("/user/:userID", GetTransfers(plaidClient))
-	}
+    
 
 	// Stripe-powered customer management routes
 	customers := r.Group("/stripe/customers")
@@ -169,11 +121,7 @@ func main() {
 		connect.GET("/account/:accountID/status", GetConnectAccountStatus)
 	}
 
-	// Stripe-powered payment methods routes (integrating Plaid verification)
-	stripePaymentMethods := r.Group("/stripe/payment-methods")
-	{
-		stripePaymentMethods.POST("/from-plaid", CreatePaymentMethodFromPlaid)
-	}
+    
 
 	// Setup intent route (save payment methods)
 	r.POST("/stripe/setup-intent", CreateSetupIntentForCustomer)
@@ -187,24 +135,13 @@ func main() {
 		stripeTransfers.GET("/:id/status", GetTransferStatus)
 	}
 
-	// Balance routes
-	balance := r.Group("/balance")
-	{
-		balance.GET("/:userID", GetBalance(plaidClient))
-	}
+    
 
-	// Transaction routes
-	transactions := r.Group("/transactions")
-	{
-		transactions.GET("/:userID", GetTransactions(plaidClient))
-	}
-
-	// Webhook routes
-	webhooks := r.Group("/webhooks")
-	{
-		webhooks.POST("/plaid", HandlePlaidWebhook(plaidClient))
-		webhooks.POST("/stripe", HandleStripeWebhook)
-	}
+    // Webhook routes
+    webhooks := r.Group("/webhooks")
+    {
+        webhooks.POST("/stripe", HandleStripeWebhook)
+    }
 
 	// P2P payments via Stripe (platform charge then transfer)
 	r.POST("/payments/p2p/initiate", InitiateP2PPayment)
