@@ -104,49 +104,44 @@ func main() {
         auth.POST("/register", Register)
     }
 
-    // Apply auth middleware to protected routes (can be refined per-group)
-    r.Use(AuthMiddleware())
+    // Protected routes group
+    protected := r.Group("/")
+    protected.Use(AuthMiddleware())
 
-    
+    // Stripe-powered customer management routes
+    customers := protected.Group("/stripe/customers")
+    {
+        customers.POST("/", CreateStripeCustomer)
+    }
 
-	// Stripe-powered customer management routes
-	customers := r.Group("/stripe/customers")
-	{
-		customers.POST("/", CreateStripeCustomer)
-	}
+    // Stripe Connect onboarding routes
+    connect := protected.Group("/stripe/connect")
+    {
+        connect.POST("/account", CreateConnectAccount)
+        connect.POST("/account-link", CreateConnectAccountLink)
+        connect.GET("/account/:accountID/status", GetConnectAccountStatus)
+    }
 
-	// Stripe Connect onboarding routes
-	connect := r.Group("/stripe/connect")
-	{
-		connect.POST("/account", CreateConnectAccount)
-		connect.POST("/account-link", CreateConnectAccountLink)
-		connect.GET("/account/:accountID/status", GetConnectAccountStatus)
-	}
+    // Setup intent route (save payment methods)
+    protected.POST("/stripe/setup-intent", CreateSetupIntentForCustomer)
 
-    
+    // Stripe-powered transfer routes
+    stripeTransfers := protected.Group("/stripe/transfers")
+    {
+        stripeTransfers.POST("/", CreateTransferWithStripe)
+        stripeTransfers.POST("/p2p", CreateP2PTransferWithStripe)
+        stripeTransfers.POST("/confirm", ConfirmTransfer)
+        stripeTransfers.GET("/:id/status", GetTransferStatus)
+    }
 
-	// Setup intent route (save payment methods)
-	r.POST("/stripe/setup-intent", CreateSetupIntentForCustomer)
-
-	// Stripe-powered transfer routes
-	stripeTransfers := r.Group("/stripe/transfers")
-	{
-		stripeTransfers.POST("/", CreateTransferWithStripe)
-		stripeTransfers.POST("/p2p", CreateP2PTransferWithStripe)
-		stripeTransfers.POST("/confirm", ConfirmTransfer)
-		stripeTransfers.GET("/:id/status", GetTransferStatus)
-	}
-
-    
-
-    // Webhook routes
+    // Webhook routes (public)
     webhooks := r.Group("/webhooks")
     {
         webhooks.POST("/stripe", HandleStripeWebhook)
     }
 
-	// P2P payments via Stripe (platform charge then transfer)
-	r.POST("/payments/p2p/initiate", InitiateP2PPayment)
+    // P2P payments via Stripe (platform charge then transfer)
+    protected.POST("/payments/p2p/initiate", InitiateP2PPayment)
 
 	// Start server
 	port := os.Getenv("PORT")

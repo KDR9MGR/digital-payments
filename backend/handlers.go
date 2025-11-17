@@ -16,6 +16,20 @@ func HealthCheck(c *gin.Context) {
     })
 }
 
+func OnboardingRefresh(c *gin.Context) {
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Onboarding refresh",
+        "timestamp": time.Now().UTC(),
+    })
+}
+
+func OnboardingComplete(c *gin.Context) {
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Onboarding complete",
+        "timestamp": time.Now().UTC(),
+    })
+}
+
 func Login(c *gin.Context) {
     uidVal, ok := c.Get("userID")
     if !ok {
@@ -62,4 +76,3 @@ func Register(c *gin.Context) {
     }
     c.JSON(http.StatusCreated, gin.H{"userID": uid, "email": email})
 }
-
