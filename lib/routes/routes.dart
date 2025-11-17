@@ -417,11 +417,9 @@ class Routes {
   ];
 
   static String _detectBaseUrl() {
-    if (GetPlatform.isAndroid) {
-      return 'http://10.0.2.2:8080';
-    }
-    return 'http://localhost:8080';
+    const String prodUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://dp-backend-1086070277189.us-central1.run.app');
+    return prodUrl;
   }
 
-  static const String _stripePk = 'pk_test_51SEcirK1iBm9UZtEoOKynLRugDPzIGbBhLck8KinOIjYkXjhtbB1amJKjQ3gzwkdkHDqAZ11OyXw71WAMWlPfDd700ZI5zJbXY';
+  static const String _stripePk = 'pk_live_51SEcihGeG3YjuRGbzDXziTISGZum98th9D0ZQA3CVJcewtdBNeSsy2rILIrx4CI8UwEyrSLIqLzoeJnTecs5vbGc00Q0gqS1Oc';
 }

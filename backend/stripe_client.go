@@ -174,7 +174,7 @@ func (sc *StripeClient) CreatePaymentIntent(ctx context.Context, amount int64, c
             "us_bank_account",
         }),
         Metadata: map[string]string{
-            "integration": "plaid_stripe",
+            "integration": "stripe_only",
         },
     }
     // Merge additional metadata

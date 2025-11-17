@@ -94,6 +94,8 @@ func main() {
 
     // Health check endpoint
     r.GET("/health", HealthCheck)
+    r.GET("/onboarding/refresh", OnboardingRefresh)
+    r.GET("/onboarding/complete", OnboardingComplete)
 
     // Authentication routes
     auth := r.Group("/auth")

@@ -3,6 +3,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/stripe_api_service.dart';
+import 'package:get/get.dart';
+import '../../routes/routes.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final String baseUrl;
@@ -11,7 +13,7 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBindingObserver {
   String statusText = '';
   String accountId = '';
   String uid = '';
@@ -20,6 +22,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     api = StripeApiService(widget.baseUrl);
     final u = FirebaseAuth.instance.currentUser;
     uid = u?.uid ?? '';
@@ -39,6 +42,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       accountId = (res['stripe_account_id'] ?? '') as String;
       statusText = 'ready';
     });
+    if (accountId.isNotEmpty) {
+      await _link();
+    }
   }
 
   Future<void> _link() async {
@@ -56,6 +62,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     setState(() {
       statusText = ce && pe ? 'enabled' : 'pending';
     });
+    if (statusText == 'enabled') {
+      Get.offAllNamed(Routes.sendMoneySimpleScreen);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && accountId.isNotEmpty) {
+      _poll();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -70,9 +92,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Text('Account: $accountId'),
             Text('Status: $statusText'),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: _ensure, child: const Text('Ensure Onboarding')),
-            ElevatedButton(onPressed: accountId.isEmpty ? null : _link, child: const Text('Open KYC Link')),
-            ElevatedButton(onPressed: accountId.isEmpty ? null : _poll, child: const Text('Poll Status')),
+            ElevatedButton(onPressed: _ensure, child: const Text('Start Onboarding')),
+            ElevatedButton(onPressed: accountId.isEmpty ? null : _link, child: const Text('Continue KYC')),
+            ElevatedButton(onPressed: accountId.isEmpty ? null : _poll, child: const Text('Refresh Status')),
           ],
         ),
       ),
